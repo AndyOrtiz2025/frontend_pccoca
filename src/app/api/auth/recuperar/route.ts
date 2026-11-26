@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { recuperarSchema } from "@/lib/auth/schemas";
+import { recuperarSchema } from "@/schemas/auth.schema";
 
 /**
  * Recuperar o cambiar contraseña (solo Paola y Oscar).

@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { Rol } from "@/lib/auth/roles";
-import { loginSchema, MAX_PASSWORD } from "@/lib/auth/schemas";
+import { loginSchema, MAX_PASSWORD } from "@/schemas/auth.schema";
 
 interface LoginFormProps {
   perfil: Rol;

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { LoaderCircle, Lock } from "lucide-react";
 import { Alert, Button, Field, Input } from "@/components/ui";
-import { recuperarSchema } from "@/lib/auth/schemas";
+import { recuperarSchema } from "@/schemas/auth.schema";
 import { ocultarCorreo } from "@/lib/format";
 
 interface RecuperarFormProps {

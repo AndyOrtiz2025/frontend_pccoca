@@ -43,18 +43,31 @@ En producción (`npm run build && npm start`) la app exige `SESSION_SECRET` en e
 
 ## Estructura
 
+Se organiza **por módulos**: cada funcionalidad (productos, trámites, pendientes…) repite el mismo patrón de carpetas.
+
 ```
 src/
-  app/                 Rutas (App Router)
-    (dev)/componentes  Galería de componentes (solo para revisar el diseño)
-    api/auth/          Rutas BFF: login, logout, recuperar contraseña
-    login/, recuperar/ Pantallas de acceso
-  proxy.ts             Protege las rutas por rol antes de mostrar la página
-  components/ui/       Componentes base de la guía (botones, tablas, modales...)
-  lib/                 Utilidades (formato de moneda, semáforo de stock...)
-    auth/              Sesión (cookie HttpOnly firmada), roles, validaciones y límite de intentos
-  types/               Tipos del dominio
+  app/                        Las RUTAS (App Router). Los (grupos) ordenan pero no cambian la URL.
+    (auth)/                   Pantallas sin sesión: perfiles (/), login, recuperar
+    (dashboard)/              Pantallas protegidas, una carpeta por rol
+      empleado/  paola/  oscar/
+    (dev)/componentes/        Galería de componentes (solo para revisar el diseño)
+    api/                      BFF: el navegador llama aquí y esto habla con el backend
+  components/
+    ui/                       Genéricos de la Guía UI v2 (Button, Input, Modal, Table…)
+    <modulo>/                 Específicos de un módulo (ej. acceso/, productos/)
+  lib/                        Utilidades y lógica compartida (formato, semáforo, sesión)
+    auth/                     Sesión (cookie HttpOnly firmada), roles y límite de intentos
+  schemas/                    Validaciones con Zod (<modulo>.schema.ts)
+  types/                      Tipos de TypeScript (<modulo>.ts)
+  hooks/                      Hooks propios (useCarrito…), se crea cuando haga falta
+  proxy.ts                    El "portero": protege las rutas por rol (en Next.js 16
+                              reemplaza a middleware.ts)
 ```
+
+**Para agregar un módulo nuevo** (ej. "pendientes"): su página en `app/(dashboard)/<rol>/pendientes/`,
+sus componentes en `components/pendientes/`, su validación en `schemas/pendiente.schema.ts`
+y su tipo en `types/pendiente.ts`. Nunca mezclar la lógica de dos módulos en la misma carpeta.
 
 ## Flujo de trabajo
 
