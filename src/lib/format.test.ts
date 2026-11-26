@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatContador, formatQ, ocultarCorreo } from "./format";
+import { formatContador, formatPrecio, formatQ, ocultarCorreo } from "./format";
 
 describe("formatQ", () => {
   it("usa el formato Q 1,250.00", () => {
@@ -23,5 +23,13 @@ describe("formatContador", () => {
 describe("ocultarCorreo", () => {
   it("deja solo la primera letra", () => {
     expect(ocultarCorreo("paola@gmail.com")).toBe("p***@gmail.com");
+  });
+});
+
+describe("formatPrecio", () => {
+  it("fijo, rango y pendiente", () => {
+    expect(formatPrecio({ monto: 80 })).toBe("Q 80.00");
+    expect(formatPrecio({ monto: 700, montoMax: 1000 })).toBe("Q 700.00 – Q 1,000.00");
+    expect(formatPrecio({ monto: null })).toBe("Pendiente");
   });
 });
