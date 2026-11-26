@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Tokens de la Guía de Diseño UI v2 (Azul Medianoche y Oro).
+ * Fuente única de verdad: si un color, tamaño o radio cambia, se cambia aquí.
+ * Tailwind genera las clases a partir de @theme (ej. bg-navy-900, text-gold-500, rounded-md).
+ */
+@theme {
+  /* Fuente */
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Quitamos la paleta por defecto de Tailwind para usar solo la de la guía */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* Base */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-navy-950: #0b1426;
+  --color-navy-900: #14213d;
+  --color-navy-800: #1c2d50;
+  --color-navy-700: #26385e;
+  --color-navy-300: #a9b2c3;
+  --color-gold-600: #e08e00;
+  --color-gold-500: #fca311;
+  --color-gold-200: #ffe2a8;
+  --color-gold-100: #fff1d6;
+  --color-gold-50: #fff8eb;
+  --color-gold-text: #7a4a00;
+  --color-gray-100: #f4f4f5;
+  --color-gray-200: #e5e5e5;
+  --color-gray-300: #d4d4d8;
+
+  /* Texto */
+  --color-ink-strong: #14213d;
+  --color-ink: #374151;
+  --color-ink-muted: #6b7280;
+
+  /* Semáforo de stock */
+  --color-stock-ok: #22a06b;
+  --color-stock-ok-bg: #e3f5ec;
+  --color-stock-ok-text: #146c46;
+  --color-stock-low: #f97316;
+  --color-stock-low-bg: #ffedd5;
+  --color-stock-low-text: #9a3412;
+  --color-stock-out: #dc2626;
+  --color-stock-out-bg: #fde7e7;
+  --color-stock-out-text: #991b1b;
+  --color-danger-border: #f5c2c2;
+
+  /* Estados de trámites y servicios */
+  --color-st-recibido: #14213d;
+  --color-st-recibido-bg: #e8ebf2;
+  --color-st-proceso: #fca311;
+  --color-st-proceso-bg: #fff1d6;
+  --color-st-proceso-text: #7a4a00;
+  --color-st-listo: #7c5cd6;
+  --color-st-listo-bg: #eee9fb;
+  --color-st-listo-text: #4c2f9e;
+  --color-st-entregado: #22a06b;
+  --color-st-entregado-bg: #e3f5ec;
+  --color-st-entregado-text: #146c46;
+
+  /* Radios */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(20, 33, 61, 0.06);
+  --shadow-md: 0 6px 16px rgba(20, 33, 61, 0.1);
+  --shadow-lg: 0 18px 40px rgba(20, 33, 61, 0.22);
+  --shadow-focus: 0 0 0 3px rgba(252, 163, 17, 0.35);
+
+  /* Escala tipográfica (tamaño / interlineado) */
+  --text-h1: 20px;
+  --text-h1--line-height: 28px;
+  --text-h2: 16px;
+  --text-h2--line-height: 22px;
+  --text-body: 13px;
+  --text-body--line-height: 20px;
+  --text-button: 12.5px;
+  --text-button--line-height: 16px;
+  --text-small: 12px;
+  --text-small--line-height: 16px;
+  --text-badge: 11px;
+  --text-badge--line-height: 14px;
+  --text-overline: 10.5px;
+  --text-overline--line-height: 14px;
+  --text-kpi: 22px;
+  --text-kpi--line-height: 28px;
+  --text-price: 15px;
+  --text-price--line-height: 20px;
+
+  /* Layout */
+  --spacing-sidebar: 220px;
+  --spacing-topbar: 56px;
+}
+
+/* Degradados de la guía (sección 3) como utilidades */
+@utility bg-grad-sidebar {
+  background-image: linear-gradient(180deg, #14213d 0%, #0b1426 100%);
+}
+@utility bg-grad-hero {
+  background-image: linear-gradient(135deg, #14213d 0%, #1c2d50 50%, #000000 100%);
+}
+@utility bg-grad-gold {
+  background-image: linear-gradient(135deg, #fca311 0%, #ffc14d 100%);
+}
+@utility bg-grad-gold-hover {
+  background-image: linear-gradient(135deg, #e08e00 0%, #fca311 100%);
+}
+@utility bg-grad-gold-soft {
+  background-image: linear-gradient(135deg, #fff1d6 0%, #ffffff 100%);
+}
+@utility bg-grad-login {
+  background-image: radial-gradient(
+    circle at 50% 0%,
+    rgba(252, 163, 17, 0.22) 0%,
+    #14213d 45%,
+    #000000 100%
+  );
+}
+@utility bg-grad-chart {
+  background-image: linear-gradient(180deg, rgba(252, 163, 17, 0.3) 0%, rgba(252, 163, 17, 0) 100%);
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-gray-100 font-sans text-body text-ink antialiased;
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
