@@ -1,21 +1,39 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { AccesoShell } from "@/components/acceso/AccesoShell";
+import { AvatarPerfil } from "@/components/acceso/AvatarPerfil";
+import { PERFILES, ROLES } from "@/lib/auth/roles";
 
-// Temporal: en la Fase 2 esta ruta será la pantalla "¿Quién está usando PC Coca?".
-export default function Home() {
+export const metadata: Metadata = { title: "¿Quién está usando PC Coca?" };
+
+/** Pantalla 1: selección de perfil, estilo "¿Quién está viendo?" de Netflix. */
+export default function SeleccionPerfil() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-grad-login text-center">
-      <p className="text-h2 font-semibold text-white">
-        PC Coca<span className="text-gold-500">.</span>
-      </p>
-      <p className="text-body text-navy-300">
-        Frontend en construcción · Fase 1: sistema de diseño
-      </p>
-      <Link
-        href="/componentes"
-        className="inline-flex h-8 items-center rounded-sm bg-grad-gold px-3.5 text-button font-semibold text-navy-900 hover:bg-grad-gold-hover"
-      >
-        Ver componentes
-      </Link>
-    </main>
+    <AccesoShell>
+      <h1 className="text-center text-[26px] leading-9 font-light">¿Quién está usando PC Coca?</h1>
+      <ul className="mt-12 flex flex-wrap justify-center gap-12">
+        {ROLES.map((rol) => {
+          const perfil = PERFILES[rol];
+          return (
+            <li key={rol}>
+              <Link
+                href={`/login/${rol}`}
+                className="group flex flex-col items-center gap-4 rounded-lg p-2 focus-visible:shadow-none"
+              >
+                <AvatarPerfil
+                  rol={rol}
+                  nombre={perfil.nombre}
+                  size={112}
+                  className="outline-[3px] outline-offset-4 outline-transparent transition-all duration-200 group-hover:scale-105 group-hover:outline-gold-500 group-focus-visible:scale-105 group-focus-visible:outline-gold-500"
+                />
+                <span className="text-body text-navy-300 transition-colors group-hover:text-white group-focus-visible:text-white">
+                  {perfil.nombre}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </AccesoShell>
   );
 }

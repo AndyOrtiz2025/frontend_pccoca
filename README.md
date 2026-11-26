@@ -18,6 +18,18 @@ npm run dev                  # http://localhost:3000
 
 La galería de componentes está en <http://localhost:3000/componentes>.
 
+### Usuarios de prueba (solo mientras no hay backend)
+
+| Perfil   | Usuario          | Contraseña   |
+| -------- | ---------------- | ------------ |
+| Empleado | `carlos` o `ana` | `pccoca2026` |
+| Paola    | `paola`          | `pccoca2026` |
+| Oscar    | `oscar`          | `pccoca2026` |
+
+Están en `src/lib/auth/mock-users.ts` y se borran cuando el login se conecte al backend.
+
+En producción (`npm run build && npm start`) la app exige `SESSION_SECRET` en el `.env.local`.
+
 ## Scripts
 
 | Comando             | Qué hace                        |
@@ -35,8 +47,12 @@ La galería de componentes está en <http://localhost:3000/componentes>.
 src/
   app/                 Rutas (App Router)
     (dev)/componentes  Galería de componentes (solo para revisar el diseño)
+    api/auth/          Rutas BFF: login, logout, recuperar contraseña
+    login/, recuperar/ Pantallas de acceso
+  proxy.ts             Protege las rutas por rol antes de mostrar la página
   components/ui/       Componentes base de la guía (botones, tablas, modales...)
   lib/                 Utilidades (formato de moneda, semáforo de stock...)
+    auth/              Sesión (cookie HttpOnly firmada), roles, validaciones y límite de intentos
   types/               Tipos del dominio
 ```
 

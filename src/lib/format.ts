@@ -13,3 +13,10 @@ export function formatQ(monto: number): string {
 export function formatContador(n: number): string {
   return n > 9 ? "9+" : String(n);
 }
+
+/** "p***@gmail.com": confirma a dónde se envió sin mostrar el correo completo. */
+export function ocultarCorreo(correo: string): string {
+  const [usuario, dominio] = correo.split("@");
+  if (!usuario || !dominio) return correo;
+  return `${usuario[0]}***@${dominio}`;
+}
