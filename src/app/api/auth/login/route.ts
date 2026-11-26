@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { autenticarMock } from "@/lib/auth/mock-users";
 import { estaBloqueado, limpiarIntentos, registrarFallo } from "@/lib/auth/rate-limit";
 import { INICIO_ROL } from "@/lib/auth/roles";
-import { loginSchema } from "@/lib/auth/schemas";
+import { loginSchema } from "@/schemas/auth.schema";
 import { COOKIE_SESION, firmarSesion, opcionesCookie } from "@/lib/auth/session";
 
 // Respuesta genérica: nunca decimos si el usuario existe o no (guía, sección Seguridad).

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { autenticarMock } from "./mock-users";
 import { estaBloqueado, limpiarIntentos, registrarFallo } from "./rate-limit";
 import { rolDeRuta } from "./roles";
-import { loginSchema, MAX_PASSWORD, recuperarSchema } from "./schemas";
+import { loginSchema, MAX_PASSWORD, recuperarSchema } from "@/schemas/auth.schema";
 import { firmarSesion, leerSesion } from "./session";
 
 describe("sesión firmada", () => {

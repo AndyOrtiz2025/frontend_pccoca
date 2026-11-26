@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ROLES } from "./roles";
+import { ROLES } from "@/lib/auth/roles";
 
 /** BCrypt solo usa los primeros 72 bytes; limitamos la contraseña (guía, sección Backend). */
 export const MAX_PASSWORD = 72;
