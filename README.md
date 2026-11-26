@@ -57,7 +57,11 @@ src/
     ui/                       Genéricos de la Guía UI v2 (Button, Input, Modal, Table…)
     <modulo>/                 Específicos de un módulo (ej. acceso/, productos/)
   lib/                        Utilidades y lógica compartida (formato, semáforo, sesión)
+    api.ts                    Capa de datos: el ÚNICO lugar donde las pantallas piden información
     auth/                     Sesión (cookie HttpOnly firmada), roles y límite de intentos
+    reglas/                   Reglas de negocio puras y probadas (precios, mayoreo, stock,
+                              carrito, estados, búsqueda)
+    mocks/                    Datos de prueba mientras no hay backend
   schemas/                    Validaciones con Zod (<modulo>.schema.ts)
   types/                      Tipos de TypeScript (<modulo>.ts)
   hooks/                      Hooks propios (useCarrito…), se crea cuando haga falta
