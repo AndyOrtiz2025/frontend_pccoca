@@ -47,9 +47,11 @@ export function nombreArchivoComprobante(c: Pick<Comprobante, "id" | "fecha">): 
   return `comprobante-pc-coca-${p.year}-${p.month}-${p.day}-${p.hour}${p.minute}-${numeroComprobante(c)}.pdf`;
 }
 
-/** "Cuaderno universitario (paquete)". */
+/** "Lápiz Mongol (caja)". */
 export function nombreLinea(l: LineaComprobante): string {
-  return l.presentacion === "paquete" ? `${l.nombre} (paquete)` : l.nombre;
+  return l.presentacion === "paquete"
+    ? `${l.nombre} (${(l.nombrePaquete ?? "paquete").toLowerCase()})`
+    : l.nombre;
 }
 
 /** Total de artículos (unidades y paquetes). */

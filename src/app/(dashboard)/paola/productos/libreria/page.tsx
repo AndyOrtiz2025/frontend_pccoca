@@ -1,13 +1,29 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { InventarioAdmin } from "@/components/inventario/InventarioAdmin";
+import {
+  obtenerProductosAdmin,
+  obtenerProveedores,
+  obtenerSubcategorias,
+  sugerirCodigo,
+} from "@/lib/api";
 
 export const metadata: Metadata = { title: "Librería" };
 
-export default function Page() {
+/** Pantalla 15: administración de productos de Librería (precios, costos y stock exacto). */
+export default async function Page() {
+  const [productos, proveedores, codigoSugerido, subcategorias] = await Promise.all([
+    obtenerProductosAdmin("paola", "libreria"),
+    obtenerProveedores(),
+    sugerirCodigo("paola", "libreria"),
+    obtenerSubcategorias("paola", "libreria"),
+  ]);
   return (
-    <EnConstruccion
-      descripcion="Administración de productos de Librería: precios, mayoreo, costo, margen, fraccionables y códigos de barras."
-      referencia="Pantallas 15 y 16"
+    <InventarioAdmin
+      productos={productos}
+      categoria="libreria"
+      proveedores={proveedores}
+      codigoSugerido={codigoSugerido}
+      subcategorias={subcategorias}
     />
   );
 }

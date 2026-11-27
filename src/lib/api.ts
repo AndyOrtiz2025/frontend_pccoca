@@ -17,6 +17,11 @@ import {
 } from "@/lib/reglas/procesos";
 import { resumenVentasDelDia, type ResumenVentas } from "@/lib/reglas/resumen";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
+import { aplicarEdicion, crearDesdeFormulario, siguienteCodigo } from "@/lib/reglas/productos";
+import { PROVEEDORES_DEMO } from "@/lib/mocks/proveedores";
+import type { MermaInput, ProductoInput } from "@/schemas/producto.schema";
+import type { SubcategoriaInput } from "@/schemas/subcategoria.schema";
+import type { Proveedor } from "@/types/proveedor";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
 import type { CargoInput, CuentaInput } from "@/schemas/pendiente.schema";
@@ -78,6 +83,259 @@ export async function obtenerTodosParaVenta(): Promise<ProductoVenta[]> {
 export async function obtenerProductosAdmin(rol: Rol, categoria: Categoria): Promise<Producto[]> {
   if (rol === "empleado" || !CATEGORIAS_ADMIN[rol].includes(categoria)) throw new SinPermisoError();
   return almacen().productos.filter((p) => p.categoria === categoria);
+}
+
+// ─── Administración de productos (Paola: Librería y Varios, Oscar: Tecnología) ───
+
+/** Máximo para la foto de un producto. */
+export const MAX_BYTES_FOTO = 2 * 1024 * 1024;
+
+export async function obtenerProveedores(): Promise<Proveedor[]> {
+  return PROVEEDORES_DEMO;
+}
+
+/** Código sugerido para un producto nuevo de esa categoría. */
+export async function sugerirCodigo(rol: Rol, categoria: Categoria): Promise<string> {
+  exigirCategoria(rol, categoria);
+  return siguienteCodigo(almacen().productos, categoria);
+}
+
+function exigirCategoria(rol: Rol, categoria: Categoria) {
+  if (rol === "empleado" || !CATEGORIAS_ADMIN[rol].includes(categoria)) throw new SinPermisoError();
+}
+
+function productoAdministrado(rol: Rol, id: string): Producto {
+  const producto = almacen().productos.find((p) => p.id === id);
+  if (!producto) throw new ReglaNegocioError("Ese producto ya no existe");
+  exigirCategoria(rol, producto.categoria);
+  return producto;
+}
+
+/** El código interno y el de barras no se repiten en todo el catálogo (los usa el escáner). */
+function validarCodigosUnicos(datos: ProductoInput, excluirId?: string) {
+  const barras = (datos.codigoBarras || datos.codigo).toUpperCase();
+  for (const p of almacen().productos) {
+    if (p.id === excluirId) continue;
+    if (p.codigo === datos.codigo) {
+      throw new ReglaNegocioError(`El código ${datos.codigo} ya es de "${p.nombre}"`);
+    }
+    if (p.codigoBarras.toUpperCase() === barras || p.codigo === barras) {
+      throw new ReglaNegocioError(`Ese código de barras ya es de "${p.nombre}"`);
+    }
+  }
+}
+
+/** Guarda la foto (ya leída) revisando que de verdad sea JPG, PNG o WebP. Devuelve su URL. */
+function guardarFoto(foto: Uint8Array): string {
+  if (foto.byteLength > MAX_BYTES_FOTO) throw new ReglaNegocioError("La foto pesa más de 2 MB");
+  const tipo = detectarTipo(foto);
+  if (tipo !== "image/jpeg" && tipo !== "image/png" && tipo !== "image/webp") {
+    throw new ReglaNegocioError("La foto debe ser JPG, PNG o WebP");
+  }
+  const id = `IMG-${crypto.randomUUID()}`;
+  almacen().imagenes.set(id, { tipo, datos: foto });
+  return `/api/imagenes/${id}`;
+}
+
+function borrarFoto(url?: string) {
+  const id = url?.match(/^\/api\/imagenes\/(IMG-[\w-]+)$/)?.[1];
+  if (id) almacen().imagenes.delete(id);
+}
+
+export async function crearProducto(
+  rol: Rol,
+  datos: ProductoInput,
+  foto?: Uint8Array,
+): Promise<Producto> {
+  exigirCategoria(rol, datos.categoria);
+  validarCodigosUnicos(datos);
+  if (datos.proveedorId && !PROVEEDORES_DEMO.some((p) => p.id === datos.proveedorId)) {
+    throw new ReglaNegocioError("Ese proveedor no existe");
+  }
+  const producto = crearDesdeFormulario(`p-${crypto.randomUUID()}`, datos);
+  if (foto) producto.imagenUrl = guardarFoto(foto);
+  almacen().productos.push(producto);
+  return producto;
+}
+
+/**
+ * Editar datos y precios. `foto`: nueva foto; `null`: quitar la foto; `undefined`: dejarla.
+ * La categoría no cambia (Paola no puede pasar un producto a Tecnología).
+ */
+export async function editarProducto(
+  rol: Rol,
+  id: string,
+  datos: ProductoInput,
+  foto?: Uint8Array | null,
+): Promise<Producto> {
+  const producto = productoAdministrado(rol, id);
+  if (datos.categoria !== producto.categoria) {
+    throw new ReglaNegocioError("La categoría de un producto no se cambia");
+  }
+  validarCodigosUnicos(datos, id);
+  if (datos.proveedorId && !PROVEEDORES_DEMO.some((p) => p.id === datos.proveedorId)) {
+    throw new ReglaNegocioError("Ese proveedor no existe");
+  }
+  let editado: Producto;
+  try {
+    editado = aplicarEdicion(producto, datos);
+  } catch (e) {
+    throw new ReglaNegocioError((e as Error).message);
+  }
+  if (foto) {
+    editado.imagenUrl = guardarFoto(foto);
+    borrarFoto(producto.imagenUrl);
+  } else if (foto === null) {
+    borrarFoto(producto.imagenUrl);
+    editado.imagenUrl = undefined;
+  }
+  Object.assign(producto, editado);
+  return producto;
+}
+
+/** Desactivar (deja de venderse, conserva historial) o reactivar. Nunca se borra. */
+export async function cambiarActivoProducto(
+  rol: Rol,
+  id: string,
+  activo: boolean,
+): Promise<Producto> {
+  const producto = productoAdministrado(rol, id);
+  producto.activo = activo;
+  return producto;
+}
+
+/** Merma registrada por Paola/Oscar desde inventario (dañado, vencido…): descuenta stock. */
+export async function registrarMermaAdmin(
+  rol: Rol,
+  datos: MermaInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Producto> {
+  const producto = productoAdministrado(rol, datos.productoId);
+  if (datos.presentacion === "paquete" && !producto.fraccionable) {
+    throw new ReglaNegocioError("Este producto no se maneja por paquete");
+  }
+  try {
+    producto.stock = descontarStock(producto.stock, datos.presentacion, datos.cantidad);
+  } catch (e) {
+    throw new ReglaNegocioError((e as Error).message);
+  }
+  almacen().movimientos.push({
+    id: `M-${crypto.randomUUID()}`,
+    tipo: "merma",
+    productoId: producto.id,
+    presentacion: datos.presentacion,
+    cantidad: datos.cantidad,
+    motivo: datos.motivo.trim(),
+    fecha: ahora.toISOString(),
+    registradoPor: usuario,
+  });
+  return producto;
+}
+
+// ─── Subcategorías (Útiles escolares, Escritura, Folders…) ───
+
+export interface Subcategoria {
+  nombre: string;
+  /** Productos de la categoría que la usan (activos e inactivos). */
+  productos: number;
+}
+
+/** "Útiles  escolares" y "utiles escolares" son la misma subcategoría. */
+function mismaSubcategoria(a: string, b: string) {
+  return normalizar(a) === normalizar(b);
+}
+
+/** Las creadas a mano más las que ya usan los productos, con cuántos productos tiene cada una. */
+export async function obtenerSubcategorias(
+  rol: Rol,
+  categoria: Categoria,
+): Promise<Subcategoria[]> {
+  exigirCategoria(rol, categoria);
+  const a = almacen();
+  const nombres: string[] = [];
+  const agregar = (n?: string) => {
+    if (n && !nombres.some((x) => mismaSubcategoria(x, n))) nombres.push(n);
+  };
+  a.subcategorias[categoria].forEach(agregar);
+  a.productos.filter((p) => p.categoria === categoria).forEach((p) => agregar(p.subcategoria));
+  return nombres
+    .map((nombre) => ({
+      nombre,
+      productos: a.productos.filter(
+        (p) =>
+          p.categoria === categoria && p.subcategoria && mismaSubcategoria(p.subcategoria, nombre),
+      ).length,
+    }))
+    .sort((x, y) => x.nombre.localeCompare(y.nombre, "es"));
+}
+
+/**
+ * Crear, renombrar (o unir, si el nombre nuevo ya existe) y eliminar subcategorías.
+ * Renombrar actualiza todos los productos; eliminar solo se permite sin productos.
+ */
+export async function administrarSubcategoria(
+  rol: Rol,
+  datos: SubcategoriaInput,
+): Promise<{ productosMovidos: number }> {
+  exigirCategoria(rol, datos.categoria);
+  const a = almacen();
+  const lista = a.subcategorias[datos.categoria];
+  const existentes = await obtenerSubcategorias(rol, datos.categoria);
+  const buscar = (n: string) => existentes.find((x) => mismaSubcategoria(x.nombre, n));
+
+  if (datos.accion === "crear") {
+    const ya = buscar(datos.nombre);
+    if (ya) throw new ReglaNegocioError(`Ya existe "${ya.nombre}"`);
+    lista.push(datos.nombre);
+    return { productosMovidos: 0 };
+  }
+
+  const origen = buscar(datos.accion === "renombrar" ? datos.de : datos.nombre);
+  if (!origen) throw new ReglaNegocioError("Esa subcategoría ya no existe");
+  const quitarDeLista = () => {
+    a.subcategorias[datos.categoria] = a.subcategorias[datos.categoria].filter(
+      (n) => !mismaSubcategoria(n, origen.nombre),
+    );
+  };
+
+  if (datos.accion === "eliminar") {
+    if (origen.productos > 0) {
+      throw new ReglaNegocioError(
+        `"${origen.nombre}" tiene ${origen.productos} productos: muévelos o únela con otra primero`,
+      );
+    }
+    quitarDeLista();
+    return { productosMovidos: 0 };
+  }
+
+  // Renombrar: si el destino ya existe se unen y se usa su nombre tal como está escrito.
+  const destino = buscar(datos.a);
+  const nombreFinal =
+    destino && !mismaSubcategoria(destino.nombre, origen.nombre) ? destino.nombre : datos.a;
+  let movidos = 0;
+  for (const p of a.productos) {
+    if (
+      p.categoria === datos.categoria &&
+      p.subcategoria &&
+      mismaSubcategoria(p.subcategoria, origen.nombre)
+    ) {
+      p.subcategoria = nombreFinal;
+      movidos++;
+    }
+  }
+  quitarDeLista();
+  if (!a.subcategorias[datos.categoria].some((n) => mismaSubcategoria(n, nombreFinal))) {
+    a.subcategorias[datos.categoria].push(nombreFinal);
+  }
+  return { productosMovidos: movidos };
+}
+
+/** Foto de un producto: la ve cualquier usuario con sesión (el empleado la usa al vender). */
+export async function obtenerImagen(id: string) {
+  const imagen = almacen().imagenes.get(id);
+  if (!imagen) throw new ReglaNegocioError("La imagen no existe");
+  return imagen;
 }
 
 export async function obtenerModulosTramite(): Promise<ModuloTramite[]> {

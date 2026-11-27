@@ -3,6 +3,7 @@
 import { ArrowLeft, CircleCheck, LoaderCircle, ShoppingBag } from "lucide-react";
 import { Alert, Button, Chip, Modal } from "@/components/ui";
 import { formatQ } from "@/lib/format";
+import { etiquetaPresentacion } from "@/lib/presentacion";
 import type { CarritoCalculado } from "@/lib/reglas/carrito";
 import { ETIQUETA_MOVIMIENTO } from "@/types/movimiento";
 
@@ -75,7 +76,7 @@ export function ModalRevisarVenta({
                     <p className="font-medium text-ink-strong">{l.producto.nombre}</p>
                     <div className="mt-0.5 flex flex-wrap gap-1">
                       {l.producto.fraccionable && (
-                        <Chip>{l.presentacion === "unidad" ? "Por unidad" : "Por paquete"}</Chip>
+                        <Chip>{etiquetaPresentacion(l.producto, l.presentacion)}</Chip>
                       )}
                       {l.mayoreo && <Chip tono="bg-gold-100 text-gold-text">Mayoreo</Chip>}
                     </div>

@@ -5,6 +5,7 @@ export * from "./CapaImpresion";
 export * from "./Card";
 export * from "./Checkbox";
 export * from "./Chip";
+export * from "./Combobox";
 export * from "./Confirmar";
 export * from "./Counter";
 export * from "./DocumentoImprimible";

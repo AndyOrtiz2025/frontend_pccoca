@@ -57,15 +57,34 @@ export const productoSchema = z
     fraccionable: z
       .object({
         unidadesPorPaquete: z.number().int().min(2, "Un paquete debe traer al menos 2 unidades"),
+        /** "Caja", "Bolsa", "Resma"… o el que escriba Paola en "Otro". */
+        nombrePaquete: z
+          .string()
+          .trim()
+          .min(2, "Escribe cómo se llama el paquete")
+          .max(20, "Máximo 20 letras")
+          .regex(/^[\p{L} ]+$/u, "Solo letras")
+          .optional(),
         precioPaquete: dinero("El precio por paquete").refine(
           (n) => n > 0,
           "El precio por paquete debe ser mayor a 0",
         ),
+        mayoreoPaquete: z
+          .object({
+            desde: z.number().int().min(2, "El mayoreo aplica desde 2 o más"),
+            precio: dinero("El precio de mayoreo"),
+          })
+          .optional(),
         costoPaquete: dinero("El costo por paquete").optional(),
       })
       .optional(),
+    /** Unidades (simple) o paquetes cerrados (fraccionable). Solo se usa al crear. */
     stockInicial: entero("El stock inicial"),
-    proveedorId: z.string().optional(),
+    /** Fraccionable: unidades sueltas de un paquete ya abierto. Solo al crear. */
+    sueltasIniciales: entero("Las unidades sueltas").optional(),
+    /** Total "lleno" para el semáforo (unidades o paquetes). Si falta, se usa el stock inicial. */
+    stockReferencia: entero("El stock de referencia").optional(),
+    proveedorId: z.string().max(60).optional(),
   })
   .superRefine((p, ctx) => {
     const prefijo = { libreria: "LIB", tecnologia: "TEC", varios: "VAR" }[p.categoria];
@@ -88,6 +107,21 @@ export const productoSchema = z
         code: "custom",
         path: ["mayoreo", "precio"],
         message: "El precio de mayoreo debe ser menor al precio normal",
+      });
+    }
+    if (p.fraccionable?.mayoreoPaquete && p.categoria === "tecnologia") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["fraccionable", "mayoreoPaquete"],
+        message: "Tecnología tiene precios fijos, sin mayoreo",
+      });
+    }
+    const mp = p.fraccionable?.mayoreoPaquete;
+    if (mp && p.fraccionable && mp.precio >= p.fraccionable.precioPaquete) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["fraccionable", "mayoreoPaquete", "precio"],
+        message: "El mayoreo debe ser menor al precio normal",
       });
     }
     if (p.aplicaConsumoInterno && p.categoria === "varios") {

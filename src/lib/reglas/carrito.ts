@@ -1,3 +1,4 @@
+import { nombrePaquete } from "@/lib/presentacion";
 import type {
   Comprobante,
   LineaCarrito,
@@ -139,6 +140,7 @@ export function generarComprobante(
       codigo: l.producto.codigo,
       nombre: l.producto.nombre,
       presentacion: l.presentacion,
+      ...(l.presentacion === "paquete" && { nombrePaquete: nombrePaquete(l.producto) }),
       cantidad: l.cantidad,
       precioUnitario: l.precioUnitario,
       subtotal: l.subtotal,

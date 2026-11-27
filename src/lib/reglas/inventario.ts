@@ -94,7 +94,9 @@ export function aVistaEmpleado(producto: Producto): ProductoVenta {
     activo: producto.activo,
     fraccionable: fraccionable && {
       unidadesPorPaquete: fraccionable.unidadesPorPaquete,
+      nombrePaquete: fraccionable.nombrePaquete,
       precioPaquete: fraccionable.precioPaquete,
+      mayoreoPaquete: fraccionable.mayoreoPaquete,
     },
     disponibilidad: {
       nivel: nivelProducto(producto),

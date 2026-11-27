@@ -28,12 +28,22 @@ export interface Mayoreo {
   precio: number;
 }
 
-/** Datos extra de un producto que se compra empaquetado y se vende también suelto (sección 11.5). */
+/**
+ * Datos extra de un producto que se compra empaquetado y se vende también suelto (sección 11.5).
+ * Ej. lápiz Mongol: caja de 12 a Q 18, se vende la caja a Q 22 (Q 20 desde 5 cajas) y el lápiz a Q 2.
+ */
 export interface Fraccionable {
   unidadesPorPaquete: number;
+  /** Cómo se llama el paquete de este producto: "Caja", "Bolsa", "Resma"… (por defecto "Paquete"). */
+  nombrePaquete?: string;
   /** Precio del paquete cerrado. El precio por unidad es `Producto.precio`. */
   precioPaquete: number;
-  /** Costo del paquete al proveedor (dato sensible). */
+  /** Mayoreo por paquete: a partir de `desde` paquetes, cada uno cuesta `precio`. */
+  mayoreoPaquete?: Mayoreo;
+  /**
+   * Costo del paquete al proveedor (dato sensible). El costo por unidad (`Producto.costo`) se
+   * calcula de aquí: costoPaquete ÷ unidadesPorPaquete.
+   */
   costoPaquete?: number;
 }
 
