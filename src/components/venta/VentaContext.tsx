@@ -41,7 +41,8 @@ interface VentaValue {
   agregar: (linea: LineaCarrito) => void;
   cambiar: (indice: number, cantidad: number) => void;
   vaciar: () => void;
-  confirmar: () => Promise<void>;
+  /** Registra la venta en el servidor. Devuelve `true` si se guardó. */
+  confirmar: () => Promise<boolean>;
   abrirPaquete: (productoId: string) => Promise<boolean>;
 }
 
@@ -170,8 +171,10 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
             r.mermas && `${r.mermas} merma${r.mermas > 1 ? "s" : ""}`,
           ].filter(Boolean);
           if (otros.length) toast(`Registrado: ${otros.join(" y ")}`, "success");
+          return true;
         } catch (e) {
           manejarError(e);
+          return false;
         } finally {
           setConfirmando(false);
         }

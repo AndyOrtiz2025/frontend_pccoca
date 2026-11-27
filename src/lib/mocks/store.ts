@@ -7,6 +7,7 @@ import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
+import { ventasDemo } from "./ventas";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
 export interface MovimientoRegistrado {
@@ -51,7 +52,7 @@ const g = globalThis as unknown as { __pccocaAlmacen?: Almacen };
 export function almacen(): Almacen {
   g.__pccocaAlmacen ??= {
     productos: structuredClone(PRODUCTOS_DEMO),
-    comprobantes: [],
+    comprobantes: ventasDemo(),
     movimientos: [],
     conversiones: [],
     entradas: structuredClone(ENTRADAS_DEMO),

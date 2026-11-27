@@ -61,3 +61,10 @@ export function cobroDeServicio(servicio: ServicioTecnico, opcionId?: string): C
   if (monto === null || montoMax !== undefined) return undefined;
   return { total: monto, detalle: servicio.nombre };
 }
+
+/** "RENAP · Certificado de nacimiento" o "Laptop HP 240 G8". */
+export function describirProceso(p: EnProceso): string {
+  return p.tipo === "tramite"
+    ? p.tramiteNombre
+    : `${p.equipo}${p.marcaModelo ? ` ${p.marcaModelo}` : ""}`;
+}

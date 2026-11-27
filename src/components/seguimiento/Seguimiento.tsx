@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { BellRing, CircleAlert, CircleCheck, ClipboardList, Phone, X } from "lucide-react";
 import {
@@ -8,7 +7,6 @@ import {
   Button,
   Card,
   Chip,
-  Confirmar,
   SearchInput,
   StatusChip,
   Table,
@@ -18,17 +16,15 @@ import {
   THead,
   Tr,
   Tabs,
-  useToast,
 } from "@/components/ui";
-import { useErrorApi } from "@/hooks/useErrorApi";
 import { cn } from "@/lib/cn";
 import { formatFechaHora, haceCuanto } from "@/lib/fechas";
 import { formatQ } from "@/lib/format";
-import { postApi } from "@/lib/http";
 import { normalizar } from "@/lib/reglas/busqueda";
-import { porCobrar } from "@/lib/reglas/procesos";
+import { describirProceso, porCobrar } from "@/lib/reglas/procesos";
 import type { EstadoProceso } from "@/types/estados";
 import type { EnProceso } from "@/types/proceso";
+import { ConfirmarEntrega } from "./ConfirmarEntrega";
 
 type Pestana = "todos" | EstadoProceso;
 const PESTANAS: { value: Pestana; label: string }[] = [
@@ -38,11 +34,7 @@ const PESTANAS: { value: Pestana; label: string }[] = [
   { value: "listo", label: "Listos para entregar" },
 ];
 
-function detalle(p: EnProceso) {
-  return p.tipo === "tramite"
-    ? p.tramiteNombre
-    : `${p.equipo}${p.marcaModelo ? ` ${p.marcaModelo}` : ""}`;
-}
+const detalle = describirProceso;
 
 interface SeguimientoProps {
   /** Ya filtrados por tipo: trámites (de Paola) o servicios técnicos (de Oscar). */
@@ -55,9 +47,6 @@ interface SeguimientoProps {
  * Trámites → solo los de Paola. Servicios Técnicos → solo los de Oscar.
  */
 export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
-  const router = useRouter();
-  const toast = useToast();
-  const manejarError = useErrorApi();
   const [pestana, setPestana] = useState<Pestana>("todos");
   const [consulta, setConsulta] = useState("");
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
@@ -77,18 +66,6 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
   }, [procesos, pestana, consulta]);
 
   const seleccionado = procesos.find((p) => p.id === seleccionadoId) ?? null;
-
-  async function entregar(p: EnProceso) {
-    try {
-      await postApi(`/api/procesos/${encodeURIComponent(p.id)}/entregar`);
-      toast(`Entregado a ${p.cliente.nombre}`, "success");
-      setAEntregar(null);
-      if (seleccionadoId === p.id) setSeleccionadoId(null);
-      router.refresh(); // vuelve a pedir la lista y los contadores al servidor
-    } catch (e) {
-      manejarError(e);
-    }
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -307,30 +284,13 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
       </div>
 
       {aEntregar && (
-        <Confirmar
-          titulo="¿El cliente ya lo recogió?"
-          textoConfirmar="Sí, marcar entregado"
-          onCancelar={() => setAEntregar(null)}
-          onConfirmar={() => entregar(aEntregar)}
-        >
-          <p>
-            <strong>{aEntregar.cliente.nombre}</strong> · {detalle(aEntregar)}
-          </p>
-          {aEntregar.cobro ? (
-            <p className="mt-2 text-body">
-              Cobra <strong className="tabular">{formatQ(porCobrar(aEntregar.cobro))}</strong> antes
-              de entregar.
-            </p>
-          ) : (
-            <p className="mt-2 text-body text-stock-low-text">
-              {aEntregar.responsable === "paola" ? "Paola" : "Oscar"} aún no dice cuánto cobrar.
-              Pregúntale antes de entregar.
-            </p>
-          )}
-          <p className="mt-2 text-ink-muted">
-            Al confirmar, desaparece de Seguimiento. Esto no se puede deshacer.
-          </p>
-        </Confirmar>
+        <ConfirmarEntrega
+          proceso={aEntregar}
+          onCerrar={() => setAEntregar(null)}
+          onEntregado={() => {
+            if (seleccionadoId === aEntregar.id) setSeleccionadoId(null);
+          }}
+        />
       )}
     </div>
   );

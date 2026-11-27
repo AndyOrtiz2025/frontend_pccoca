@@ -144,22 +144,52 @@
   }
 }
 
-/* Impresión del comprobante: solo se imprime lo que está dentro de .zona-impresion */
+/*
+ * Impresión: los documentos (comprobantes, estados de cuenta) se dibujan en una capa aparte,
+ * hija directa de <body> (.capa-impresion). Al imprimir se oculta todo lo demás con display:none
+ * y la capa deja de ser "fixed": así sale UNA sola hoja (Chrome repite lo "fixed" en cada hoja).
+ */
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 0; /* quita la fecha y el título que el navegador pone arriba y abajo */
   }
-  .zona-impresion,
-  .zona-impresion * {
-    visibility: visible;
+  body:has(> .capa-impresion) > :not(.capa-impresion) {
+    display: none !important;
+  }
+  .capa-impresion {
+    position: static !important;
+    display: block !important;
+    padding: 0 !important;
+  }
+  .capa-impresion .no-imprimir {
+    display: none !important;
+  }
+  /* Los contenedores del documento dejan de ser ventana: sin scroll, sombra ni fondo. */
+  .capa-impresion :has(.zona-impresion) {
+    position: static !important;
+    display: block !important;
+    max-height: none !important;
+    max-width: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+    padding: 0 !important;
   }
   .zona-impresion {
-    position: absolute;
-    inset: 0 auto auto 0;
-    width: 80mm;
-    box-shadow: none;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-width: 190mm !important;
+    margin: 0 auto !important;
+    padding: 12mm !important;
   }
-  .no-imprimir {
-    display: none !important;
+  /* Ticket de 80 mm (impresora térmica) o centrado arriba en una hoja carta al guardar PDF. */
+  .zona-impresion.ticket {
+    width: 72mm !important;
+    padding: 4mm 0 !important;
+    border: 0 !important;
   }
 }

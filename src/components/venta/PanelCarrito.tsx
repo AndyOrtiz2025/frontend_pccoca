@@ -1,10 +1,12 @@
 "use client";
 
-import { LoaderCircle, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { Alert, Button, Card, Chip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatQ } from "@/lib/format";
 import { ETIQUETA_MOVIMIENTO } from "@/types/movimiento";
+import { ModalRevisarVenta } from "./ModalRevisarVenta";
 import { useVenta } from "./VentaContext";
 
 /** Carrito (pantalla 5, columna derecha; y página Carrito a lo ancho). */
@@ -12,6 +14,12 @@ export function PanelCarrito({ className }: { className?: string }) {
   const { calculado, cambiar, vaciar, confirmar, confirmando } = useVenta();
   const { lineas, total, avisosMayoreo, cantidadVentas } = calculado;
   const vacio = lineas.length === 0;
+  // Primer clic: se revisa todo en pantalla. La venta se guarda solo al confirmar en la revisión.
+  const [revisando, setRevisando] = useState(false);
+
+  async function confirmarDefinitivo() {
+    if (await confirmar()) setRevisando(false);
+  }
 
   return (
     <Card className={cn("flex flex-col", className)}>
@@ -106,8 +114,11 @@ export function PanelCarrito({ className }: { className?: string }) {
                 {formatQ(total)}
               </span>
             </div>
-            <Button onClick={confirmar} disabled={confirmando} className="h-9 w-full">
-              {confirmando && <LoaderCircle className="animate-spin" />}
+            <Button
+              onClick={() => setRevisando(true)}
+              disabled={confirmando}
+              className="h-9 w-full"
+            >
               {cantidadVentas > 0 ? "Confirmar venta" : "Registrar movimientos"}
             </Button>
             <Button variant="secondary" onClick={vaciar} disabled={confirmando} className="w-full">
@@ -115,6 +126,14 @@ export function PanelCarrito({ className }: { className?: string }) {
             </Button>
           </div>
         </>
+      )}
+      {revisando && !vacio && (
+        <ModalRevisarVenta
+          calculado={calculado}
+          confirmando={confirmando}
+          onConfirmar={confirmarDefinitivo}
+          onClose={() => setRevisando(false)}
+        />
       )}
     </Card>
   );

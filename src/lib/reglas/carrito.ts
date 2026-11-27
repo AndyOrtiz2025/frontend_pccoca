@@ -131,7 +131,7 @@ export function calcularCarrito(
  */
 export function generarComprobante(
   calculado: CarritoCalculado,
-  datos: { id: string; fecha: string; atendio: string },
+  datos: { id: string; fecha: string; atendio: string; usuario: string },
 ): Comprobante | null {
   const lineas: LineaComprobante[] = calculado.lineas
     .filter((l) => l.tipo === "venta")
