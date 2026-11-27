@@ -52,6 +52,7 @@ export const PROCESOS_DEMO: EnProceso[] = [
     fechaIngreso: "2026-11-23T11:20:00-06:00",
     estado: "entregado",
     notas: [],
+    entrega: { fecha: "2026-11-24T16:00:00-06:00", entregadoPor: "Ana" },
   },
   {
     id: "sp-1",

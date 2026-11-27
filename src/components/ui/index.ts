@@ -4,6 +4,7 @@ export * from "./Button";
 export * from "./Card";
 export * from "./Checkbox";
 export * from "./Chip";
+export * from "./Confirmar";
 export * from "./Counter";
 export * from "./Field";
 export * from "./Input";

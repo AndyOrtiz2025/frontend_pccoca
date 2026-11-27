@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { PackageSearch } from "lucide-react";
 import { Card, SearchInput, Select } from "@/components/ui";
-import { buscarProductos } from "@/lib/reglas/busqueda";
+import { buscarPorCodigo, buscarProductos } from "@/lib/reglas/busqueda";
 import type { Categoria } from "@/types/producto";
 import { PanelCarrito } from "./PanelCarrito";
 import { TarjetaProducto } from "./TarjetaProducto";
@@ -13,7 +13,7 @@ type Orden = "nombre" | "precio_asc" | "precio_desc";
 
 /** Pantalla 5: catálogo de una categoría para vender, con el carrito fijo a la derecha. */
 export function CatalogoVenta({ categoria }: { categoria: Categoria }) {
-  const { productos, abrirProducto, abrirPorCodigo } = useVenta();
+  const { productos, abrirProducto, escanear } = useVenta();
   const [consulta, setConsulta] = useState("");
   const [sub, setSub] = useState("todas");
   const [orden, setOrden] = useState<Orden>("nombre");
@@ -52,7 +52,8 @@ export function CatalogoVenta({ categoria }: { categoria: Categoria }) {
             value={consulta}
             onChange={(e) => setConsulta(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && abrirPorCodigo(consulta)) setConsulta("");
+              if (e.key === "Enter" && buscarPorCodigo(deCategoria, consulta) && escanear(consulta))
+                setConsulta("");
             }}
             className="min-w-56 flex-1"
           />

@@ -12,7 +12,7 @@ import { useVenta } from "./VentaContext";
  * Un lector de código de barras escribe el código + Enter, así que también funciona aquí.
  */
 export function BuscadorProductos({ className }: { className?: string }) {
-  const { productos, abrirProducto, abrirPorCodigo } = useVenta();
+  const { productos, abrirProducto, escanear } = useVenta();
   const [consulta, setConsulta] = useState("");
   const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(0);
@@ -59,7 +59,7 @@ export function BuscadorProductos({ className }: { className?: string }) {
             // Código exacto (lector o tecleado) primero; si no, el resultado marcado.
             const porCodigo = buscarPorCodigo(productos, consulta);
             if (porCodigo) {
-              abrirPorCodigo(consulta);
+              escanear(consulta);
               setConsulta("");
               setAbierto(false);
             } else if (resultados.length) elegir(activo);

@@ -1,8 +1,11 @@
 import "server-only";
 import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
+import type { Pendiente } from "@/types/pendiente";
+import type { EnProceso } from "@/types/proceso";
 import type { Producto } from "@/types/producto";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
-import { ENTRADAS_DEMO } from "./procesos";
+import { PENDIENTES_DEMO } from "./pendientes";
+import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
@@ -30,6 +33,8 @@ interface Almacen {
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
   entradas: Entrada[];
+  procesos: EnProceso[];
+  pendientes: Pendiente[];
   /** Contenido de los archivos subidos, por id. */
   archivos: Map<string, { meta: ArchivoAdjunto; datos: Uint8Array }>;
 }
@@ -48,6 +53,8 @@ export function almacen(): Almacen {
     movimientos: [],
     conversiones: [],
     entradas: structuredClone(ENTRADAS_DEMO),
+    procesos: structuredClone(PROCESOS_DEMO),
+    pendientes: structuredClone(PENDIENTES_DEMO),
     archivos: new Map(),
   };
   return g.__pccocaAlmacen;

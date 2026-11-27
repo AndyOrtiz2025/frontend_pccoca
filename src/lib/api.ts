@@ -1,16 +1,18 @@
 import "server-only";
 import type { Rol } from "@/lib/auth/roles";
-import { PROCESOS_DEMO } from "@/lib/mocks/procesos";
-import { PENDIENTES_DEMO } from "@/lib/mocks/pendientes";
 import { SERVICIOS_DEMO } from "@/lib/mocks/servicios";
 import { MODULOS_TRAMITE_DEMO, TRAMITES_DEMO } from "@/lib/mocks/tramites";
 import { detectarTipo, MAX_ARCHIVOS, MAX_BYTES_ARCHIVO, nombreSeguro } from "@/lib/archivos";
 import { almacen } from "@/lib/mocks/store";
 import { EMPLEADOS_DEMO } from "@/lib/mocks/usuarios";
 import { calcularCarrito, generarComprobante, validarLinea } from "@/lib/reglas/carrito";
+import { calcularPrecio } from "@/lib/reglas/precios";
+import { puedeCambiarEstado } from "@/lib/reglas/procesos";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
+import type { PendienteInput } from "@/schemas/pendiente.schema";
+import type { Contadores } from "@/types/contadores";
 import type { Comprobante, LineaCarrito } from "@/types/movimiento";
 import type { Pendiente } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
@@ -80,8 +82,11 @@ export async function obtenerServicios(rol: Rol): Promise<ServicioTecnico[]> {
  * Empleado: todos (para Seguimiento). Paola: solo trámites. Oscar: solo servicios.
  */
 export async function obtenerProcesos(rol: Rol): Promise<EnProceso[]> {
-  if (rol === "empleado") return PROCESOS_DEMO;
-  return PROCESOS_DEMO.filter((p) => p.responsable === rol);
+  // Los entregados ya no se muestran en ninguna lista (se conservan para reportes).
+  const activos = almacen()
+    .procesos.filter((p) => p.estado !== "entregado")
+    .sort((a, b) => b.fechaIngreso.localeCompare(a.fechaIngreso));
+  return rol === "empleado" ? activos : activos.filter((p) => p.responsable === rol);
 }
 
 /** Bandeja de entradas: Paola recibe las de trámite y Oscar las de servicio. */
@@ -95,7 +100,7 @@ export async function obtenerEntradas(rol: Exclude<Rol, "empleado">): Promise<En
 /** Pendientes (fiado): el Empleado registra, Paola solo lee, Oscar no tiene acceso. */
 export async function obtenerPendientes(rol: Rol): Promise<Pendiente[]> {
   if (rol === "oscar") throw new SinPermisoError();
-  return PENDIENTES_DEMO;
+  return [...almacen().pendientes].sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
 /** Usuarios: solo Oscar los administra. */
@@ -308,4 +313,94 @@ export async function obtenerArchivo(
   const archivo = almacen().archivos.get(id);
   if (!archivo) throw new ReglaNegocioError("El archivo no existe");
   return archivo;
+}
+
+/**
+ * El Empleado entrega al cliente un trámite o equipo "Listo para entregar" (sección 8.11).
+ * Desde ese momento desaparece de Seguimiento.
+ */
+export async function marcarEntregado(
+  procesoId: string,
+  usuario: string,
+  ahora = new Date(),
+): Promise<void> {
+  const proceso = almacen().procesos.find((p) => p.id === procesoId);
+  if (!proceso) throw new ReglaNegocioError("Ese trámite o servicio ya no está en seguimiento");
+  if (!puedeCambiarEstado("empleado", proceso, "entregado")) {
+    throw new ReglaNegocioError("Solo se puede entregar cuando está Listo para entregar");
+  }
+  proceso.estado = "entregado";
+  proceso.entrega = { fecha: ahora.toISOString(), entregadoPor: usuario };
+}
+
+/** Fecha del día en Guatemala (AAAA-MM-DD), como en el Excel de pendientes. */
+function hoyGuatemala(ahora: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Guatemala" }).format(ahora);
+}
+
+/**
+ * Registrar un fiado (sección 8.8). Si es de un producto: precio del servidor (con mayoreo)
+ * y se descuenta del stock en ese momento.
+ */
+export async function crearPendiente(
+  datos: PendienteInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Pendiente> {
+  const a = almacen();
+  const base = {
+    id: `PE-${ahora.getTime()}`,
+    fecha: hoyGuatemala(ahora),
+    cliente: datos.cliente.trim(),
+    grupo: datos.grupo,
+    cantidad: datos.cantidad,
+    registradoPor: usuario,
+  };
+
+  let pendiente: Pendiente;
+  if (datos.tipo === "producto") {
+    const producto = a.productos.find((p) => p.id === datos.productoId && p.activo);
+    if (!producto) throw new ReglaNegocioError("Ese producto ya no existe");
+    let stock: Producto["stock"];
+    try {
+      stock = descontarStock(producto.stock, "unidad", datos.cantidad);
+    } catch (e) {
+      throw new ReglaNegocioError(`${producto.nombre}: ${(e as Error).message}`);
+    }
+    producto.stock = stock;
+    pendiente = {
+      ...base,
+      productoId: producto.id,
+      descripcion: producto.nombre,
+      precioUnitario: calcularPrecio(producto, "unidad", datos.cantidad).unitario,
+    };
+  } else {
+    pendiente = {
+      ...base,
+      descripcion: datos.descripcion.trim(),
+      precioUnitario: datos.precioUnitario,
+    };
+  }
+  a.pendientes.push(pendiente);
+  return pendiente;
+}
+
+/** "Pagado": el registro se ELIMINA, no se guarda historial (sección 8.8). */
+export async function pagarPendiente(pendienteId: string): Promise<Pendiente> {
+  const a = almacen();
+  const i = a.pendientes.findIndex((p) => p.id === pendienteId);
+  if (i === -1) throw new ReglaNegocioError("Ese pendiente ya fue pagado o no existe");
+  const [eliminado] = a.pendientes.splice(i, 1);
+  return eliminado!;
+}
+
+/** Contadores del menú y la campanita, calculados con los datos actuales. */
+export async function obtenerContadores(rol: Rol): Promise<Contadores> {
+  const a = almacen();
+  const listos = a.procesos.filter((p) => p.estado === "listo").length;
+  if (rol === "empleado") return { pendientes: a.pendientes.length, notificaciones: listos };
+  const tipo = rol === "paola" ? "tramite" : "servicio";
+  const entradas = a.entradas.filter((e) => e.tipo === tipo && !e.leida).length;
+  // TODO(backend): comentarios sin leer; por ahora se mantienen los de prueba.
+  return { entradas, comentarios: rol === "paola" ? 2 : 1, notificaciones: entradas };
 }

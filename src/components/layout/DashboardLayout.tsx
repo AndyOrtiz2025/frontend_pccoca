@@ -1,9 +1,8 @@
 import { Suspense, type ReactNode } from "react";
 import { VentaProvider } from "@/components/venta/VentaContext";
-import { obtenerTodosParaVenta } from "@/lib/api";
+import { obtenerContadores, obtenerTodosParaVenta } from "@/lib/api";
 import { obtenerSesion } from "@/lib/auth/server";
 import { PERFILES, type Rol } from "@/lib/auth/roles";
-import { CONTADORES_DEMO } from "@/lib/mocks/contadores";
 import { AppShell } from "./AppShell";
 
 async function ShellConSesion({ rol, children }: { rol: Rol; children: ReactNode }) {
@@ -14,7 +13,7 @@ async function ShellConSesion({ rol, children }: { rol: Rol; children: ReactNode
     <AppShell
       rol={rol}
       usuario={{ nombre, cargo: PERFILES[rol].cargo }}
-      contadores={CONTADORES_DEMO[rol]}
+      contadores={await obtenerContadores(rol)}
     >
       {children}
     </AppShell>

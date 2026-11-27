@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { Seguimiento } from "@/components/seguimiento/Seguimiento";
+import { obtenerProcesos } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Seguimiento" };
 
-export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Servicios técnicos en curso con su estado; aquí se marcan como Entregado."
-      referencia="Pantalla 12"
-    />
-  );
+export default async function Page() {
+  const procesos = (await obtenerProcesos("empleado")).filter((p) => p.tipo === "servicio");
+  return <Seguimiento procesos={procesos} tipo="servicio" />;
 }

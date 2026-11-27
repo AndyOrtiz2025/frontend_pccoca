@@ -8,7 +8,7 @@ import { useVentaOpcional } from "@/components/venta/VentaContext";
 import { Modal } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { Rol } from "@/lib/auth/roles";
-import type { Contadores } from "@/lib/mocks/contadores";
+import type { Contadores } from "@/types/contadores";
 import { ShellContext, type ShellValue, type UsuarioShell } from "./ShellContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
