@@ -16,10 +16,11 @@ describe("registrarVenta", () => {
   it("calcula precios en el servidor, descuenta stock y genera comprobante", async () => {
     const r = await registrarVenta(
       [{ productoId: id("LIB-0034"), tipo: "venta", presentacion: "unidad", cantidad: 8 }],
-      "Carlos",
+      { usuario: "carlos", nombre: "Carlos" },
     );
     expect(r.comprobante?.total).toBe(16);
     expect(r.comprobante?.atendio).toBe("Carlos");
+    expect(r.comprobante?.usuario).toBe("carlos");
     expect(stock("LIB-0034")).toMatchObject({ sueltas: 0, paquetes: 3 });
     expect(JSON.stringify(r)).not.toMatch(/costo/i);
   });
@@ -41,7 +42,7 @@ describe("registrarVenta", () => {
           motivo: "roto",
         },
       ],
-      "Ana",
+      { usuario: "ana", nombre: "Ana" },
     );
     expect(r.comprobante).toBeNull();
     expect([r.consumos, r.mermas]).toEqual([1, 1]);
@@ -56,11 +57,12 @@ describe("registrarVenta", () => {
           { productoId: id("TEC-0012"), tipo: "venta", presentacion: "unidad", cantidad: 1 },
           { productoId: id("LIB-0070"), tipo: "venta", presentacion: "unidad", cantidad: 1 }, // agotado
         ],
-        "Carlos",
+        { usuario: "carlos", nombre: "Carlos" },
       ),
     ).rejects.toThrow(ReglaNegocioError);
     expect(stock("TEC-0012")).toMatchObject({ disponible: 14 });
-    expect(almacen().comprobantes).toHaveLength(0);
+    // Solo están las ventas de prueba: no se agregó ningún comprobante.
+    expect(almacen().comprobantes.every((c) => c.id.startsWith("V-demo"))).toBe(true);
   });
 
   it("dos líneas del mismo producto suman contra el mismo stock", async () => {
@@ -77,7 +79,7 @@ describe("registrarVenta", () => {
             motivo: "x",
           },
         ],
-        "Carlos",
+        { usuario: "carlos", nombre: "Carlos" },
       ),
     ).rejects.toThrow(/stock/);
   });
@@ -93,28 +95,28 @@ describe("registrarVenta", () => {
             cantidad: 1,
           },
         ],
-        "X",
+        { usuario: "x", nombre: "X" },
       ),
     ).rejects.toThrow(/consumo interno/);
     await expect(
       registrarVenta(
         [{ productoId: id("TEC-0012"), tipo: "merma", presentacion: "unidad", cantidad: 1 }],
-        "X",
+        { usuario: "x", nombre: "X" },
       ),
     ).rejects.toThrow(/motivo/);
     await expect(
       registrarVenta(
         [{ productoId: "no-existe", tipo: "venta", presentacion: "unidad", cantidad: 1 }],
-        "X",
+        { usuario: "x", nombre: "X" },
       ),
     ).rejects.toThrow();
-    await expect(registrarVenta([], "X")).rejects.toThrow(/vacío/);
+    await expect(registrarVenta([], { usuario: "x", nombre: "X" })).rejects.toThrow(/vacío/);
   });
 
   it("el admin ve el stock actualizado después de la venta", async () => {
     await registrarVenta(
       [{ productoId: id("LIB-0050"), tipo: "venta", presentacion: "unidad", cantidad: 10 }],
-      "Carlos",
+      { usuario: "carlos", nombre: "Carlos" },
     );
     const lib = await obtenerProductosAdmin("paola", "libreria");
     expect(lib.find((p) => p.codigo === "LIB-0050")!.stock).toMatchObject({ disponible: 50 });

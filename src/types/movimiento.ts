@@ -38,7 +38,10 @@ export interface LineaComprobante {
 export interface Comprobante {
   id: string;
   fecha: string;
+  /** Nombre que se imprime: "Atendió: Carlos". */
   atendio: string;
+  /** Usuario que vendió; con él cada empleado ve solo sus ventas. */
+  usuario: string;
   lineas: LineaComprobante[];
   total: number;
 }

@@ -138,6 +138,7 @@ describe("generarComprobante (sección 11.3)", () => {
       id: "c-1",
       fecha: "2026-11-26T12:40:00-06:00",
       atendio: "Carlos",
+      usuario: "carlos",
     })!;
     expect(c.lineas).toHaveLength(1);
     expect(c.total).toBe(130);
@@ -149,6 +150,8 @@ describe("generarComprobante (sección 11.3)", () => {
       [{ productoId: resma.id, tipo: "consumo_interno", presentacion: "unidad", cantidad: 1 }],
       productos,
     );
-    expect(generarComprobante(calc, { id: "c-2", fecha: "", atendio: "Ana" })).toBeNull();
+    expect(
+      generarComprobante(calc, { id: "c-2", fecha: "", atendio: "Ana", usuario: "ana" }),
+    ).toBeNull();
   });
 });

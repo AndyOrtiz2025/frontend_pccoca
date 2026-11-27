@@ -15,6 +15,55 @@ const fechaHora = new Intl.DateTimeFormat("es-GT", {
   timeZone: ZONA,
 });
 
+const diaClave = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: ZONA,
+});
+const horaGt = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  hourCycle: "h23",
+  timeZone: ZONA,
+});
+const fechaLarga = new Intl.DateTimeFormat("es-GT", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: ZONA,
+});
+const hora = new Intl.DateTimeFormat("es-GT", {
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: ZONA,
+});
+
+/**
+ * Día en hora de Guatemala ("2026-11-26"). El servidor guarda en UTC (6 h adelante):
+ * una venta a las 11:59 p. m. es de ese día y una a las 12:00 a. m. ya es del siguiente.
+ */
+export function diaDeGuatemala(fecha: string | Date): string {
+  return diaClave.format(new Date(fecha));
+}
+
+/** Buenos días (5:00–11:59), buenas tardes (12:00–18:59), buenas noches (19:00–4:59). */
+export function saludo(ahora = new Date()): string {
+  const h = Number(horaGt.format(ahora));
+  if (h >= 5 && h < 12) return "Buenos días";
+  if (h >= 12 && h < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+/** "jueves, 26 de noviembre". */
+export function formatFechaLarga(ahora = new Date()): string {
+  return fechaLarga.format(ahora);
+}
+
+/** "10:45 a. m." en hora de Guatemala. */
+export function formatHora(iso: string): string {
+  return hora.format(new Date(iso));
+}
+
 /** "25/11/2026". Acepta ISO completo o solo fecha (AAAA-MM-DD, sin cambiar de día por la zona horaria). */
 export function formatFecha(valor: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) {

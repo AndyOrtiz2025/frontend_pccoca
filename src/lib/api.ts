@@ -10,6 +10,7 @@ import { EMPLEADOS_DEMO } from "@/lib/mocks/usuarios";
 import { calcularCarrito, generarComprobante, validarLinea } from "@/lib/reglas/carrito";
 import { calcularPrecio } from "@/lib/reglas/precios";
 import { cobroDeServicio, puedeCambiarEstado } from "@/lib/reglas/procesos";
+import { resumenVentasDelDia, type ResumenVentas } from "@/lib/reglas/resumen";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
@@ -123,6 +124,12 @@ export class ReglaNegocioError extends Error {
   }
 }
 
+/** Quién vende: el usuario para filtrar sus ventas y el nombre para el comprobante. */
+export interface Vendedor {
+  usuario: string;
+  nombre: string;
+}
+
 export interface ResultadoVenta {
   /** null si el carrito solo tenía consumo interno o merma (no generan comprobante). */
   comprobante: Comprobante | null;
@@ -138,7 +145,7 @@ export interface ResultadoVenta {
  */
 export async function registrarVenta(
   lineas: LineaCarrito[],
-  atendio: string,
+  vendedor: Vendedor,
   ahora = new Date(),
 ): Promise<ResultadoVenta> {
   const a = almacen();
@@ -169,7 +176,8 @@ export async function registrarVenta(
   const comprobante = generarComprobante(calculado, {
     id: `V-${crypto.randomUUID()}`,
     fecha,
-    atendio,
+    atendio: vendedor.nombre,
+    usuario: vendedor.usuario,
   });
 
   // Todo validado: ahora sí se aplica.
@@ -186,7 +194,7 @@ export async function registrarVenta(
         cantidad: l.cantidad,
         motivo: l.motivo?.trim() || undefined,
         fecha,
-        registradoPor: atendio,
+        registradoPor: vendedor.nombre,
       }),
     );
 
@@ -370,6 +378,36 @@ export async function obtenerContadores(rol: Rol): Promise<Contadores> {
   const entradas = a.entradas.filter((e) => e.tipo === tipo && !e.leida).length;
   // TODO(backend): comentarios sin leer; por ahora se mantienen los de prueba.
   return { entradas, comentarios: rol === "paola" ? 2 : 1, notificaciones: entradas };
+}
+
+// ─── Dashboard del Empleado (pantalla 4) ─────────────────────
+
+export interface ResumenEmpleado {
+  ventas: ResumenVentas;
+  /** Trámites y servicios listos para entregar, los más antiguos primero (esperan más). */
+  listos: EnProceso[];
+  /** Total que deben los clientes en Pendientes y cuántas cuentas tienen saldo. */
+  porCobrar: { total: number; cuentas: number };
+}
+
+/**
+ * Lo que ve el Empleado al entrar. Solo SUS ventas de hoy (hora de Guatemala) y sin costos
+ * ni ganancias: los totales del negocio son para Paola en Reportes.
+ */
+export async function obtenerResumenEmpleado(
+  usuario: string,
+  ahora = new Date(),
+): Promise<ResumenEmpleado> {
+  const a = almacen();
+  const listos = a.procesos
+    .filter((p) => p.estado === "listo")
+    .sort((x, y) => x.fechaIngreso.localeCompare(y.fechaIngreso));
+  const saldos = a.cuentas.map((c) => saldoDe(c.id)).filter((s) => s > 0);
+  return {
+    ventas: resumenVentasDelDia(a.comprobantes, usuario, ahora),
+    listos,
+    porCobrar: { total: centavos(saldos.reduce((t, s) => t + s, 0)), cuentas: saldos.length },
+  };
 }
 
 // ─── Cuentas de pendientes (fiado) ───────────────────────────

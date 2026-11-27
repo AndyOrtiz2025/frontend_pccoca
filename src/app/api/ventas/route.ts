@@ -20,7 +20,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await registrarVenta(datos.data.lineas, sesion.nombre));
+    return NextResponse.json(
+      await registrarVenta(datos.data.lineas, {
+        usuario: sesion.usuario,
+        nombre: sesion.nombre,
+      }),
+    );
   } catch (e) {
     return respuestaDeError(e);
   }
