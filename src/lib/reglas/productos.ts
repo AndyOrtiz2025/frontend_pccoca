@@ -45,6 +45,7 @@ function datosPaquete(f: NonNullable<ProductoInput["fraccionable"]>) {
       ? { desde: f.mayoreoPaquete.desde, precio: centavos(f.mayoreoPaquete.precio) }
       : undefined,
     costoPaquete: f.costoPaquete === undefined ? undefined : centavos(f.costoPaquete),
+    codigoBarrasPaquete: f.codigoBarrasPaquete || undefined,
   };
 }
 
@@ -200,6 +201,7 @@ export function inventarioCsv(productos: Producto[]): string {
       "Precio paquete",
       "Mayoreo paquete desde",
       "Precio mayoreo paquete",
+      "Código de barras paquete",
       "Paquetes",
       "Sueltas / Unidades",
       "Valor a costo",
@@ -222,6 +224,7 @@ export function inventarioCsv(productos: Producto[]): string {
         p.fraccionable?.precioPaquete.toFixed(2),
         p.fraccionable?.mayoreoPaquete?.desde,
         p.fraccionable?.mayoreoPaquete?.precio.toFixed(2),
+        p.fraccionable?.codigoBarrasPaquete,
         p.stock.tipo === "fraccionable" ? p.stock.paquetes : undefined,
         p.stock.tipo === "fraccionable" ? p.stock.sueltas : p.stock.disponible,
         v.costo.toFixed(2),

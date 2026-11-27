@@ -44,6 +44,10 @@ function num(v: string): number | undefined {
 const soloDinero = (v: string) => v.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
 const soloEntero = (v: string) => v.replace(/\D/g, "");
 const txt = (n?: number) => (n === undefined ? "" : String(n));
+/** El lector termina con Enter: en los campos de código no debe enviar el formulario. */
+const sinEnter = (e: React.KeyboardEvent) => {
+  if (e.key === "Enter") e.preventDefault();
+};
 
 /**
  * Pantalla 16: Nuevo / Editar producto.
@@ -87,13 +91,16 @@ export function ModalProducto({
 
   // ─── ¿Cómo lo compras? ───
   const [comoSeCompra, setComoSeCompra] = useState<ComoSeCompra>(f ? "paquete" : "unidad");
-  const nombreInicial = f?.nombrePaquete || "Caja";
+  // Nuevo: se sugiere "Caja". Existente sin nombre guardado: "Paquete", como se muestra en todo
+  // el sistema (si no, al guardar se cambiaría a "Caja" sin que Paola lo pidiera).
+  const nombreInicial = f ? f.nombrePaquete || "Paquete" : "Caja";
   const esConocido = NOMBRES_PAQUETE.some((n) => n.singular === nombreInicial);
   const [nombreSel, setNombreSel] = useState(esConocido ? nombreInicial : OTRO);
   const [nombreOtro, setNombreOtro] = useState(esConocido ? "" : nombreInicial);
   const [unidadesPaquete, setUnidadesPaquete] = useState(txt(f?.unidadesPorPaquete));
   const [costoPaquete, setCostoPaquete] = useState(txt(f?.costoPaquete));
   const [costo, setCosto] = useState(txt(p?.costo));
+  const [barrasCaja, setBarrasCaja] = useState(f?.codigoBarrasPaquete ?? "");
 
   // ─── ¿A cuánto lo vendes? ───
   const [precioPaquete, setPrecioPaquete] = useState(txt(f?.precioPaquete));
@@ -204,6 +211,7 @@ export function ModalProducto({
             nombrePaquete: nombreSel === OTRO ? nombreOtro.trim() : nombreSel,
             precioPaquete: num(precioPaquete) ?? NaN,
             costoPaquete: num(costoPaquete),
+            codigoBarrasPaquete: barrasCaja.trim() || undefined,
             mayoreoPaquete:
               permiteMayoreo && conMayoreoPaquete
                 ? { desde: num(mayPaqDesde) ?? NaN, precio: num(mayPaqPrecio) ?? NaN }
@@ -359,7 +367,7 @@ export function ModalProducto({
             <Field
               label="Código de barras"
               error={error("codigoBarras")}
-              hint="Vacío: se usa el código"
+              hint="Vacío: se usa el código. Puedes escanearlo aquí."
             >
               {(id, d) => (
                 <Input
@@ -373,6 +381,7 @@ export function ModalProducto({
                     setCodigoBarras(e.target.value.replace(/[^A-Za-z0-9-]/g, ""));
                     limpiar("codigoBarras");
                   }}
+                  onKeyDown={sinEnter}
                 />
               )}
             </Field>
@@ -546,6 +555,39 @@ export function ModalProducto({
                     </p>
                   </div>
                 </div>
+                <Field
+                  label={`Código de barras por ${paq} (opcional)`}
+                  error={error("fraccionable.codigoBarrasPaquete")}
+                  hint={`Al escanearlo se vende 1 ${paq}. Puedes escanear el del fabricante.`}
+                >
+                  {(id, d) => (
+                    <div className="flex gap-2">
+                      <Input
+                        id={id}
+                        aria-describedby={d}
+                        className="font-mono"
+                        maxLength={32}
+                        placeholder="Sin código"
+                        value={barrasCaja}
+                        onChange={(e) => {
+                          setBarrasCaja(e.target.value.replace(/[^A-Za-z0-9-]/g, ""));
+                          limpiar("fraccionable.codigoBarrasPaquete");
+                        }}
+                        onKeyDown={sinEnter}
+                      />
+                      {!barrasCaja && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => setBarrasCaja(`${codigo}-P`)}
+                        >
+                          Usar {codigo}-P
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </Field>
               </div>
             ) : (
               <CampoDinero

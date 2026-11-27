@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/components/ui";
 import { useLectorCodigoBarras } from "@/hooks/useLectorCodigoBarras";
 import { useErrorApi } from "@/hooks/useErrorApi";
-import { nombrePaquete } from "@/lib/presentacion";
+import { nombrePaquete, pluralPaquete } from "@/lib/presentacion";
 import { postApi } from "@/lib/http";
 import {
   agregarLinea,
@@ -21,7 +21,7 @@ import {
   cambiarCantidad,
   type CarritoCalculado,
 } from "@/lib/reglas/carrito";
-import { buscarPorCodigo } from "@/lib/reglas/busqueda";
+import { buscarPorEscaneo } from "@/lib/reglas/busqueda";
 import type { Comprobante, LineaCarrito } from "@/types/movimiento";
 import type { ProductoVenta } from "@/types/producto";
 import { carritoStore } from "./carritoStore";
@@ -92,33 +92,44 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
 
   const escanear = useCallback(
     (codigo: string) => {
-      const p = buscarPorCodigo(productos, codigo);
-      if (!p) {
+      const encontrado = buscarPorEscaneo(productos, codigo);
+      if (!encontrado) {
         toast(`No hay ningún producto con el código ${codigo}`, "warning");
         return false;
       }
+      const { producto: p, presentacion } = encontrado;
       const d = p.disponibilidad;
       if (d.agotado) {
         toast(`${p.nombre} está agotado`, "warning");
         return true;
       }
-      // Sin unidades sueltas: se abre la ventana para "Abrir nuevo paquete" o vender por paquete.
-      if (p.fraccionable && d.sinSueltas) {
+      if (presentacion === "paquete" && d.sinPaquetes) {
+        // Escanearon la caja pero no quedan cajas cerradas: se abre la ventana para decidir.
+        toast(
+          `No quedan ${pluralPaquete(nombrePaquete(p)).toLowerCase()} sin abrir de ${p.nombre}`,
+          "warning",
+        );
         setSeleccionado(p);
         return true;
       }
-      // Directo al carrito: 1 unidad como venta. La cantidad se cambia en el carrito.
+      // Sin unidades sueltas: se abre la ventana para "Abrir 1 caja" o vender por caja.
+      if (presentacion === "unidad" && p.fraccionable && d.sinSueltas) {
+        setSeleccionado(p);
+        return true;
+      }
+      // Directo al carrito: 1 unidad (o 1 caja si escanearon la caja). La cantidad se cambia en el carrito.
       const nuevo = agregarLinea(carritoStore.get(), {
         productoId: p.id,
         tipo: "venta",
-        presentacion: "unidad",
+        presentacion,
         cantidad: 1,
       });
       carritoStore.set(nuevo);
       const linea = nuevo.find(
-        (l) => l.productoId === p.id && l.tipo === "venta" && l.presentacion === "unidad",
+        (l) => l.productoId === p.id && l.tipo === "venta" && l.presentacion === presentacion,
       );
-      toast(`✓ ${p.nombre} agregado (${linea?.cantidad ?? 1} en el carrito)`, "success");
+      const que = presentacion === "paquete" ? ` (${nombrePaquete(p).toLowerCase()})` : "";
+      toast(`✓ ${p.nombre}${que} agregado (${linea?.cantidad ?? 1} en el carrito)`, "success");
       return true;
     },
     [productos, toast],

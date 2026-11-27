@@ -1,6 +1,8 @@
-import type { Producto, ProductoVenta } from "@/types/producto";
+import type { Presentacion, Producto, ProductoVenta } from "@/types/producto";
 
-type Buscable = Pick<Producto | ProductoVenta, "codigo" | "codigoBarras" | "nombre">;
+type Buscable = Pick<Producto | ProductoVenta, "codigo" | "codigoBarras" | "nombre"> & {
+  fraccionable?: { codigoBarrasPaquete?: string };
+};
 
 /** Minúsculas y sin tildes: "Librería" → "libreria". */
 export function normalizar(texto: string): string {
@@ -54,9 +56,27 @@ function coincidePalabra(buscada: string, palabras: string[]): "exacta" | "aprox
  * No distingue mayúsculas.
  */
 export function buscarPorCodigo<T extends Buscable>(productos: T[], codigo: string): T | undefined {
+  return buscarPorEscaneo(productos, codigo)?.producto;
+}
+
+/**
+ * Lo que leyó el escáner: qué producto y en qué presentación.
+ * El código de la caja (`fraccionable.codigoBarrasPaquete`) vende 1 caja; los demás, 1 unidad.
+ */
+export function buscarPorEscaneo<T extends Buscable>(
+  productos: T[],
+  codigo: string,
+): { producto: T; presentacion: Presentacion } | undefined {
   const c = normalizar(codigo);
   if (!c) return undefined;
-  return productos.find((p) => normalizar(p.codigoBarras) === c || normalizar(p.codigo) === c);
+  for (const p of productos) {
+    if (normalizar(p.codigoBarras) === c || normalizar(p.codigo) === c) {
+      return { producto: p, presentacion: "unidad" };
+    }
+    const caja = p.fraccionable?.codigoBarrasPaquete;
+    if (caja && normalizar(caja) === c) return { producto: p, presentacion: "paquete" };
+  }
+  return undefined;
 }
 
 /**

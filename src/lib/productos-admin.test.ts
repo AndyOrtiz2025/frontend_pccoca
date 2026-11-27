@@ -67,6 +67,24 @@ describe("Productos de Paola", () => {
     );
   });
 
+  it("el código de la caja tampoco se repite ni choca con el de la unidad", async () => {
+    const caja = (codigoBarrasPaquete: string) =>
+      nuevo({ fraccionable: { unidadesPorPaquete: 12, precioPaquete: 15, codigoBarrasPaquete } });
+    await expect(crearProducto("paola", caja("LIB-0045-P"))).rejects.toThrow(/caja ya es de/);
+    await expect(crearProducto("paola", caja("LIB-0021"))).rejects.toThrow(/caja ya es de/);
+    const mismoQueUnidad = productoSchema.safeParse({
+      ...nuevo(),
+      fraccionable: { unidadesPorPaquete: 12, precioPaquete: 15, codigoBarrasPaquete: "LIB-0100" },
+    });
+    expect(mismoQueUnidad.success).toBe(false);
+    expect(mismoQueUnidad.error?.issues[0]?.message).toMatch(/distinto/);
+    const p = await crearProducto("paola", caja("LIB-0100-P"));
+    expect(p.fraccionable?.codigoBarrasPaquete).toBe("LIB-0100-P");
+    await expect(
+      crearProducto("paola", nuevo({ codigo: "LIB-0101", codigoBarras: "LIB-0100-P" })),
+    ).rejects.toThrow(/ya es de/);
+  });
+
   it("editar cambia precio y foto; quitar la foto la borra", async () => {
     const p = await crearProducto("paola", nuevo(), PNG);
     const vieja = p.imagenUrl!.split("/").pop()!;

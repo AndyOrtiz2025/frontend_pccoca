@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buscarPorEscaneo } from "./reglas/busqueda";
 import { calcularPrecio } from "./reglas/precios";
 import { cantidadCon, etiquetaPresentacion, nombrePaquete, pluralPaquete } from "./presentacion";
 
@@ -64,5 +65,23 @@ describe("nombre del paquete", () => {
     expect(cantidadCon(mongol, "paquete", 3)).toBe("3 cajas");
     expect(cantidadCon(mongol, "paquete", 1)).toBe("1 caja");
     expect(cantidadCon(mongol, "unidad", 1)).toBe("1 unidad");
+  });
+});
+
+describe("escaneo de unidad y de caja", () => {
+  const productos = [
+    {
+      codigo: "LIB-0045",
+      codigoBarras: "LIB-0045",
+      nombre: "Lápiz",
+      fraccionable: { codigoBarrasPaquete: "LIB-0045-P" },
+    },
+    { codigo: "LIB-0021", codigoBarras: "7501031311309", nombre: "Resma" },
+  ];
+  it("el código del lápiz vende 1 unidad y el de la caja 1 caja", () => {
+    expect(buscarPorEscaneo(productos, "LIB-0045")?.presentacion).toBe("unidad");
+    expect(buscarPorEscaneo(productos, "lib-0045-p")?.presentacion).toBe("paquete");
+    expect(buscarPorEscaneo(productos, "7501031311309")?.producto.nombre).toBe("Resma");
+    expect(buscarPorEscaneo(productos, "LIB-9999")).toBeUndefined();
   });
 });
