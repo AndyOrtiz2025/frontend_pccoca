@@ -143,3 +143,23 @@
     box-shadow: var(--shadow-focus);
   }
 }
+
+/* Impresión del comprobante: solo se imprime lo que está dentro de .zona-impresion */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .zona-impresion,
+  .zona-impresion * {
+    visibility: visible;
+  }
+  .zona-impresion {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 80mm;
+    box-shadow: none;
+  }
+  .no-imprimir {
+    display: none !important;
+  }
+}

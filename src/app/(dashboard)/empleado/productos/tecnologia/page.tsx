@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { CatalogoVenta } from "@/components/venta/CatalogoVenta";
 
 export const metadata: Metadata = { title: "Tecnología" };
 
 export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Catálogo de Tecnología para vender, con precios fijos y semáforo de stock."
-      referencia="Pantalla 5"
-    />
-  );
+  return <CatalogoVenta categoria="tecnologia" />;
 }

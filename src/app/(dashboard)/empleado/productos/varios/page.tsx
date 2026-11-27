@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { CatalogoVenta } from "@/components/venta/CatalogoVenta";
 
 export const metadata: Metadata = { title: "Productos Varios" };
 
 export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Catálogo de Productos Varios: juguetes, marcos, pitas, adornos."
-      referencia="Pantalla 5"
-    />
-  );
+  return <CatalogoVenta categoria="varios" />;
 }

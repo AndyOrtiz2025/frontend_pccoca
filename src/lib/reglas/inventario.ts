@@ -43,7 +43,9 @@ export function descontarStock(stock: Stock, presentacion: Presentacion, cantida
     return { ...stock, paquetes: stock.paquetes - cantidad };
   }
   if (cantidad > stock.sueltas) {
-    throw new StockInsuficienteError("No hay suficientes unidades sueltas: abre un nuevo paquete");
+    throw new StockInsuficienteError(
+      "No alcanzan las unidades sueltas. Abre un nuevo paquete desde el producto.",
+    );
   }
   return { ...stock, sueltas: stock.sueltas - cantidad };
 }
