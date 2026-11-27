@@ -47,6 +47,9 @@ export type EntradaTramiteInput = z.infer<typeof entradaTramiteSchema>;
 /** "Enviar entrada de servicio técnico" (variante de la pantalla 9): se notifica a Oscar. */
 export const entradaServicioSchema = z.object({
   cliente,
+  /** Solo ids: el nombre y el precio los pone el servidor desde el catálogo. */
+  servicioId: z.string().trim().max(60).optional(),
+  opcionId: z.string().trim().max(60).optional(),
   equipo: z.enum(TIPOS_EQUIPO, { error: "Elige el tipo de equipo" }),
   marcaModelo: z.string().trim().max(80).optional(),
   falla: z.string().trim().min(3, "Describe la falla reportada").max(500),

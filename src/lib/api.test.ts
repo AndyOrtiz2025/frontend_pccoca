@@ -3,7 +3,7 @@ import {
   obtenerCatalogoVenta,
   obtenerEmpleados,
   obtenerEntradas,
-  obtenerPendientes,
+  obtenerCuentas,
   obtenerProcesos,
   obtenerProductosAdmin,
   obtenerServicios,
@@ -26,7 +26,7 @@ describe("permisos de la capa de datos (sección 17)", () => {
 
   it("Paola no ve Servicios Técnicos; Oscar no ve Pendientes", async () => {
     await expect(obtenerServicios("paola")).rejects.toThrow(SinPermisoError);
-    await expect(obtenerPendientes("oscar")).rejects.toThrow(SinPermisoError);
+    await expect(obtenerCuentas("oscar")).rejects.toThrow(SinPermisoError);
   });
 
   it("solo Oscar ve los usuarios", async () => {

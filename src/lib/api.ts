@@ -3,18 +3,28 @@ import type { Rol } from "@/lib/auth/roles";
 import { SERVICIOS_DEMO } from "@/lib/mocks/servicios";
 import { MODULOS_TRAMITE_DEMO, TRAMITES_DEMO } from "@/lib/mocks/tramites";
 import { detectarTipo, MAX_ARCHIVOS, MAX_BYTES_ARCHIVO, nombreSeguro } from "@/lib/archivos";
+import { formatQ } from "@/lib/format";
 import { almacen } from "@/lib/mocks/store";
+import { centavos } from "@/lib/reglas/dinero";
 import { EMPLEADOS_DEMO } from "@/lib/mocks/usuarios";
 import { calcularCarrito, generarComprobante, validarLinea } from "@/lib/reglas/carrito";
 import { calcularPrecio } from "@/lib/reglas/precios";
-import { puedeCambiarEstado } from "@/lib/reglas/procesos";
+import { cobroDeServicio, puedeCambiarEstado } from "@/lib/reglas/procesos";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
-import type { PendienteInput } from "@/schemas/pendiente.schema";
+import type { CargoInput, CuentaInput } from "@/schemas/pendiente.schema";
+import { calcularSaldo, cargosPendientes, montoPagoCargos } from "@/lib/reglas/cuentas";
+import { normalizar } from "@/lib/reglas/busqueda";
 import type { Contadores } from "@/types/contadores";
 import type { Comprobante, LineaCarrito } from "@/types/movimiento";
-import type { Pendiente } from "@/types/pendiente";
+import type {
+  Cargo,
+  CuentaPendiente,
+  DetalleCuenta,
+  PagoCuenta,
+  ResumenCuenta,
+} from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto, ProductoVenta } from "@/types/producto";
 import type { ServicioTecnico } from "@/types/servicio";
@@ -97,12 +107,6 @@ export async function obtenerEntradas(rol: Exclude<Rol, "empleado">): Promise<En
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
-/** Pendientes (fiado): el Empleado registra, Paola solo lee, Oscar no tiene acceso. */
-export async function obtenerPendientes(rol: Rol): Promise<Pendiente[]> {
-  if (rol === "oscar") throw new SinPermisoError();
-  return [...almacen().pendientes].sort((a, b) => b.fecha.localeCompare(a.fecha));
-}
-
 /** Usuarios: solo Oscar los administra. */
 export async function obtenerEmpleados(rol: Rol): Promise<Empleado[]> {
   if (rol !== "oscar") throw new SinPermisoError();
@@ -162,7 +166,11 @@ export async function registrarVenta(
     lineas,
     new Map([...porId].map(([id, p]) => [id, aVistaEmpleado(p)])),
   );
-  const comprobante = generarComprobante(calculado, { id: `V-${ahora.getTime()}`, fecha, atendio });
+  const comprobante = generarComprobante(calculado, {
+    id: `V-${crypto.randomUUID()}`,
+    fecha,
+    atendio,
+  });
 
   // Todo validado: ahora sí se aplica.
   for (const [id, stock] of nuevosStocks) porId.get(id)!.stock = stock;
@@ -171,7 +179,7 @@ export async function registrarVenta(
     .filter((l) => l.tipo !== "venta")
     .forEach((l, i) =>
       a.movimientos.push({
-        id: `M-${ahora.getTime()}-${i}`,
+        id: `M-${crypto.randomUUID()}`,
         tipo: l.tipo as "consumo_interno" | "merma",
         productoId: l.productoId,
         presentacion: l.presentacion,
@@ -245,7 +253,7 @@ export async function crearEntradaTramite(
     const tipo = detectarTipo(a.datos);
     if (!tipo) throw new ReglaNegocioError(`${nombre}: solo se aceptan PDF, JPG, PNG o WEBP`);
     return {
-      meta: { id: `AR-${ahora.getTime()}-${i}`, nombre, tipo, tamano: a.datos.byteLength },
+      meta: { id: `AR-${crypto.randomUUID()}`, nombre, tipo, tamano: a.datos.byteLength },
       datos: a.datos,
     };
   });
@@ -256,7 +264,7 @@ export async function crearEntradaTramite(
     entregado: datos.documentos.some((d) => d.nombre === nombre && d.entregado),
   }));
   const entrada: EntradaTramite = {
-    id: `ET-${ahora.getTime()}`,
+    id: `ET-${crypto.randomUUID()}`,
     tipo: "tramite",
     tramiteId: tramite.id,
     tramiteNombre: `${modulo?.nombre ?? "Otros"} · ${tramite.nombre}`,
@@ -283,9 +291,26 @@ export async function crearEntradaServicio(
   enviadaPor: string,
   ahora = new Date(),
 ): Promise<EntradaServicio> {
+  // El precio sale del catálogo en el servidor: el navegador solo manda qué servicio y opción.
+  let servicio: ServicioTecnico | undefined;
+  let cobro: EntradaServicio["cobro"];
+  if (datos.servicioId) {
+    servicio = SERVICIOS_DEMO.find((s) => s.id === datos.servicioId);
+    if (!servicio) throw new ReglaNegocioError("Ese servicio ya no existe");
+    try {
+      cobro = cobroDeServicio(servicio, datos.opcionId);
+    } catch (e) {
+      throw new ReglaNegocioError((e as Error).message);
+    }
+  } else if (datos.opcionId) {
+    throw new ReglaNegocioError("Elige primero el servicio");
+  }
   const entrada: EntradaServicio = {
-    id: `ES-${ahora.getTime()}`,
+    id: `ES-${crypto.randomUUID()}`,
     tipo: "servicio",
+    servicioId: servicio?.id,
+    servicioNombre: servicio?.nombre,
+    cobro,
     equipo: datos.equipo,
     marcaModelo: datos.marcaModelo?.trim() || undefined,
     falla: datos.falla.trim(),
@@ -333,31 +358,146 @@ export async function marcarEntregado(
   proceso.entrega = { fecha: ahora.toISOString(), entregadoPor: usuario };
 }
 
-/** Fecha del día en Guatemala (AAAA-MM-DD), como en el Excel de pendientes. */
-function hoyGuatemala(ahora: Date) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Guatemala" }).format(ahora);
+/** Contadores del menú y la campanita, calculados con los datos actuales. */
+export async function obtenerContadores(rol: Rol): Promise<Contadores> {
+  const a = almacen();
+  const listos = a.procesos.filter((p) => p.estado === "listo").length;
+  if (rol === "empleado") {
+    const conSaldo = a.cuentas.filter((c) => saldoDe(c.id) > 0).length;
+    return { pendientes: conSaldo, notificaciones: listos };
+  }
+  const tipo = rol === "paola" ? "tramite" : "servicio";
+  const entradas = a.entradas.filter((e) => e.tipo === tipo && !e.leida).length;
+  // TODO(backend): comentarios sin leer; por ahora se mantienen los de prueba.
+  return { entradas, comentarios: rol === "paola" ? 2 : 1, notificaciones: entradas };
+}
+
+// ─── Cuentas de pendientes (fiado) ───────────────────────────
+
+/** Pendientes: el Empleado registra; Paola solo lee; Oscar no tiene acceso (sección 17). */
+function exigirAccesoPendientes(rol: Rol) {
+  if (rol === "oscar") throw new SinPermisoError();
+}
+
+function detalleDe(cuenta: CuentaPendiente): DetalleCuenta {
+  const a = almacen();
+  const cargos = a.cargos
+    .filter((c) => c.cuentaId === cuenta.id)
+    .sort((x, y) => y.fecha.localeCompare(x.fecha));
+  const pagos = a.pagos
+    .filter((p) => p.cuentaId === cuenta.id)
+    .sort((x, y) => y.fecha.localeCompare(x.fecha));
+  return { cuenta, cargos, pagos, ...calcularSaldo(cargos, pagos) };
+}
+
+function saldoDe(cuentaId: string) {
+  const a = almacen();
+  return calcularSaldo(
+    a.cargos.filter((c) => c.cuentaId === cuentaId),
+    a.pagos.filter((p) => p.cuentaId === cuentaId),
+  ).saldo;
+}
+
+function buscarCuenta(id: string): CuentaPendiente {
+  const cuenta = almacen().cuentas.find((c) => c.id === id);
+  if (!cuenta) throw new ReglaNegocioError("Ese cliente ya no existe");
+  return cuenta;
+}
+
+/** Lista de cuentas: primero las que deben, luego por último movimiento. */
+export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
+  exigirAccesoPendientes(rol);
+  return almacen()
+    .cuentas.map((cuenta) => {
+      const d = detalleDe(cuenta);
+      const fechas = [
+        cuenta.creada,
+        ...d.cargos.map((c) => c.fecha),
+        ...d.pagos.map((p) => p.fecha),
+      ];
+      return {
+        cuenta,
+        cargosPendientes: cargosPendientes(d.cargos).length,
+        saldo: d.saldo,
+        ultimoMovimiento: fechas.sort().at(-1)!,
+      };
+    })
+    .sort(
+      (x, y) =>
+        Number(y.saldo > 0) - Number(x.saldo > 0) ||
+        y.ultimoMovimiento.localeCompare(x.ultimoMovimiento),
+    );
+}
+
+export async function obtenerCuenta(rol: Rol, id: string): Promise<DetalleCuenta | null> {
+  exigirAccesoPendientes(rol);
+  const cuenta = almacen().cuentas.find((c) => c.id === id);
+  return cuenta ? detalleDe(cuenta) : null;
+}
+
+function nombreRepetido(nombre: string, grupo: CuentaPendiente["grupo"], excepto?: string) {
+  const n = normalizar(nombre);
+  return almacen().cuentas.some(
+    (c) => c.id !== excepto && c.grupo === grupo && normalizar(c.nombre) === n,
+  );
+}
+
+/** Nuevo cliente u organización. No permite dos con el mismo nombre (evita cuentas duplicadas). */
+export async function crearCuenta(
+  datos: CuentaInput,
+  ahora = new Date(),
+): Promise<CuentaPendiente> {
+  if (nombreRepetido(datos.nombre, datos.grupo)) {
+    throw new ReglaNegocioError(`Ya existe "${datos.nombre.trim()}". Búscalo en la lista.`);
+  }
+  const cuenta: CuentaPendiente = {
+    id: `CU-${crypto.randomUUID()}`,
+    nombre: datos.nombre.trim(),
+    grupo: datos.grupo,
+    ...(datos.telefono?.trim() && { telefono: datos.telefono.trim() }),
+    ...(datos.notas?.trim() && { notas: datos.notas.trim() }),
+    creada: ahora.toISOString(),
+  };
+  almacen().cuentas.push(cuenta);
+  return cuenta;
+}
+
+/** Editar nombre, teléfono o notas de la cuenta. */
+export async function editarCuenta(id: string, datos: CuentaInput): Promise<CuentaPendiente> {
+  const cuenta = buscarCuenta(id);
+  if (nombreRepetido(datos.nombre, datos.grupo, id)) {
+    throw new ReglaNegocioError(`Ya existe "${datos.nombre.trim()}".`);
+  }
+  cuenta.nombre = datos.nombre.trim();
+  cuenta.grupo = datos.grupo;
+  cuenta.telefono = datos.telefono?.trim() || undefined;
+  cuenta.notas = datos.notas?.trim() || undefined;
+  return cuenta;
 }
 
 /**
- * Registrar un fiado (sección 8.8). Si es de un producto: precio del servidor (con mayoreo)
- * y se descuenta del stock en ese momento.
+ * Agregar lo que se llevó fiado. De producto: precio del servidor (con mayoreo) y descuenta stock.
  */
-export async function crearPendiente(
-  datos: PendienteInput,
+export async function agregarCargo(
+  cuentaId: string,
+  datos: CargoInput,
   usuario: string,
   ahora = new Date(),
-): Promise<Pendiente> {
+): Promise<Cargo> {
+  const cuenta = buscarCuenta(cuentaId);
   const a = almacen();
   const base = {
-    id: `PE-${ahora.getTime()}`,
-    fecha: hoyGuatemala(ahora),
-    cliente: datos.cliente.trim(),
-    grupo: datos.grupo,
+    id: `CA-${crypto.randomUUID()}`,
+    cuentaId: cuenta.id,
+    fecha: ahora.toISOString(),
     cantidad: datos.cantidad,
+    ...(cuenta.grupo === "organizacion" &&
+      datos.llevadoPor?.trim() && { llevadoPor: datos.llevadoPor.trim() }),
+    ...(datos.nota?.trim() && { nota: datos.nota.trim() }),
     registradoPor: usuario,
   };
 
-  let pendiente: Pendiente;
+  let cargo: Cargo;
   if (datos.tipo === "producto") {
     const producto = a.productos.find((p) => p.id === datos.productoId && p.activo);
     if (!producto) throw new ReglaNegocioError("Ese producto ya no existe");
@@ -368,39 +508,97 @@ export async function crearPendiente(
       throw new ReglaNegocioError(`${producto.nombre}: ${(e as Error).message}`);
     }
     producto.stock = stock;
-    pendiente = {
+    cargo = {
       ...base,
       productoId: producto.id,
       descripcion: producto.nombre,
       precioUnitario: calcularPrecio(producto, "unidad", datos.cantidad).unitario,
     };
   } else {
-    pendiente = {
+    cargo = {
       ...base,
       descripcion: datos.descripcion.trim(),
       precioUnitario: datos.precioUnitario,
     };
   }
-  a.pendientes.push(pendiente);
-  return pendiente;
+  a.cargos.push(cargo);
+  return cargo;
 }
 
-/** "Pagado": el registro se ELIMINA, no se guarda historial (sección 8.8). */
-export async function pagarPendiente(pendienteId: string): Promise<Pendiente> {
-  const a = almacen();
-  const i = a.pendientes.findIndex((p) => p.id === pendienteId);
-  if (i === -1) throw new ReglaNegocioError("Ese pendiente ya fue pagado o no existe");
-  const [eliminado] = a.pendientes.splice(i, 1);
-  return eliminado!;
+/** "Dejo un abono": baja el saldo. No puede pasar de lo que debe. */
+export async function registrarAbono(
+  cuentaId: string,
+  monto: number,
+  nota: string | undefined,
+  usuario: string,
+  ahora = new Date(),
+): Promise<{ pago: PagoCuenta; detalle: DetalleCuenta }> {
+  const cuenta = buscarCuenta(cuentaId);
+  const saldo = saldoDe(cuentaId);
+  if (saldo <= 0) throw new ReglaNegocioError("Esta cuenta no tiene saldo pendiente");
+  if (centavos(monto) > saldo) {
+    throw new ReglaNegocioError(`El abono no puede ser mayor a lo que debe (${formatQ(saldo)})`);
+  }
+  const pago: PagoCuenta = {
+    id: `PA-${crypto.randomUUID()}`,
+    cuentaId,
+    fecha: ahora.toISOString(),
+    tipo: "abono",
+    monto: centavos(monto),
+    cargoIds: [],
+    ...(nota?.trim() && { nota: nota.trim() }),
+    registradoPor: usuario,
+    saldoDespues: centavos(saldo - monto),
+  };
+  almacen().pagos.push(pago);
+  return { pago, detalle: detalleDe(cuenta) };
 }
 
-/** Contadores del menú y la campanita, calculados con los datos actuales. */
-export async function obtenerContadores(rol: Rol): Promise<Contadores> {
+/** "Vamos a pagar esto": paga los cargos elegidos y los marca como pagados. */
+export async function pagarCargos(
+  cuentaId: string,
+  cargoIds: string[],
+  nota: string | undefined,
+  usuario: string,
+  ahora = new Date(),
+): Promise<{ pago: PagoCuenta; detalle: DetalleCuenta }> {
+  const cuenta = buscarCuenta(cuentaId);
   const a = almacen();
-  const listos = a.procesos.filter((p) => p.estado === "listo").length;
-  if (rol === "empleado") return { pendientes: a.pendientes.length, notificaciones: listos };
-  const tipo = rol === "paola" ? "tramite" : "servicio";
-  const entradas = a.entradas.filter((e) => e.tipo === tipo && !e.leida).length;
-  // TODO(backend): comentarios sin leer; por ahora se mantienen los de prueba.
-  return { entradas, comentarios: rol === "paola" ? 2 : 1, notificaciones: entradas };
+  const unicos = [...new Set(cargoIds)];
+  const elegidos = unicos.map((id) => a.cargos.find((c) => c.id === id && c.cuentaId === cuentaId));
+  if (elegidos.some((c) => !c))
+    throw new ReglaNegocioError("Algún cargo no pertenece a esta cuenta");
+  if (elegidos.some((c) => c!.pagoId)) throw new ReglaNegocioError("Algún cargo ya estaba pagado");
+
+  const saldo = saldoDe(cuentaId);
+  if (saldo <= 0) throw new ReglaNegocioError("Esta cuenta no tiene saldo pendiente");
+  const monto = montoPagoCargos(elegidos as Cargo[], saldo);
+  const pago: PagoCuenta = {
+    id: `PA-${crypto.randomUUID()}`,
+    cuentaId,
+    fecha: ahora.toISOString(),
+    tipo: "cargos",
+    monto,
+    cargoIds: unicos,
+    ...(nota?.trim() && { nota: nota.trim() }),
+    registradoPor: usuario,
+    saldoDespues: centavos(saldo - monto),
+  };
+  for (const c of elegidos) c!.pagoId = pago.id;
+  a.pagos.push(pago);
+  return { pago, detalle: detalleDe(cuenta) };
+}
+
+/**
+ * Eliminar un cliente que ya no regresa. Solo con saldo Q 0.00:
+ * borrar una cuenta que todavía debe sería perder ese dinero.
+ */
+export async function eliminarCuenta(id: string): Promise<void> {
+  buscarCuenta(id);
+  if (saldoDe(id) > 0)
+    throw new ReglaNegocioError("Solo se puede eliminar un cliente con saldo Q 0.00");
+  const a = almacen();
+  a.cuentas = a.cuentas.filter((c) => c.id !== id);
+  a.cargos = a.cargos.filter((c) => c.cuentaId !== id);
+  a.pagos = a.pagos.filter((p) => p.cuentaId !== id);
 }

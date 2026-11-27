@@ -2,6 +2,7 @@ import {
   AppWindow,
   Cctv,
   HardDrive,
+  KeyRound,
   MonitorCog,
   Printer,
   Router,
@@ -15,6 +16,7 @@ const ICONOS: Record<string, LucideIcon> = {
   "monitor-cog": MonitorCog,
   "app-window": AppWindow,
   "hard-drive": HardDrive,
+  "key-round": KeyRound,
   printer: Printer,
   router: Router,
 };

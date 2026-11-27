@@ -1,6 +1,9 @@
 import type { ServicioTecnico } from "@/types/servicio";
 
-/** Servicios de Oscar (sección 13). Descripciones y precios pendientes de definir por el negocio. */
+/**
+ * Servicios de Oscar (sección 13). Los que no tienen precio se cobran según la revisión.
+ * Activación de Office es un ejemplo con opciones; Oscar los administrará desde su vista.
+ */
 export const SERVICIOS_DEMO: ServicioTecnico[] = [
   {
     id: "srv-camaras",
@@ -22,6 +25,17 @@ export const SERVICIOS_DEMO: ServicioTecnico[] = [
     descripcion: null,
     precio: { monto: null },
     icono: "app-window",
+  },
+  {
+    id: "srv-office",
+    nombre: "Activación de Microsoft Office",
+    descripcion: "Licencia por tiempo según la opción que elija el cliente.",
+    precio: { monto: 150, montoMax: 250 },
+    opciones: [
+      { id: "6m", nombre: "6 meses", precio: 150 },
+      { id: "1a", nombre: "1 año", precio: 250 },
+    ],
+    icono: "key-round",
   },
   {
     id: "srv-windows",

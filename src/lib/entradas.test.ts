@@ -160,4 +160,49 @@ describe("crearEntradaServicio (sección 8.10)", () => {
     expect((await obtenerEntradas("oscar")).some((x) => x.id === e.id)).toBe(true);
     expect((await obtenerEntradas("paola")).some((x) => x.id === e.id)).toBe(false);
   });
+
+  it("el precio del servicio lo pone el servidor según la opción elegida", async () => {
+    const e = await crearEntradaServicio(
+      {
+        servicioId: "srv-office",
+        opcionId: "1a",
+        cliente: { nombre: "Luis" },
+        equipo: "Laptop",
+        falla: "Activar Office",
+        accesorios: [],
+      },
+      "Carlos",
+    );
+    expect(e.servicioNombre).toBe("Activación de Microsoft Office");
+    expect(e.cobro).toEqual({ total: 250, detalle: "Activación de Microsoft Office · 1 año" });
+  });
+
+  it("rechaza servicio con opciones sin elegir opción, o servicio inexistente", async () => {
+    const datos = {
+      cliente: { nombre: "Luis" },
+      equipo: "PC" as const,
+      falla: "Activar",
+      accesorios: [],
+    };
+    await expect(
+      crearEntradaServicio({ ...datos, servicioId: "srv-office" }, "Carlos"),
+    ).rejects.toThrow(ReglaNegocioError);
+    await expect(
+      crearEntradaServicio({ ...datos, servicioId: "no-existe" }, "Carlos"),
+    ).rejects.toThrow(ReglaNegocioError);
+  });
+
+  it("servicio sin precio: Oscar define el cobro después", async () => {
+    const e = await crearEntradaServicio(
+      {
+        servicioId: "srv-impresoras",
+        cliente: { nombre: "Luis" },
+        equipo: "Impresora",
+        falla: "No jala",
+        accesorios: [],
+      },
+      "Carlos",
+    );
+    expect(e.cobro).toBeUndefined();
+  });
 });

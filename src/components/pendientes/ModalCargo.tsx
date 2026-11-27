@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { LoaderCircle, X } from "lucide-react";
 import {
   Alert,
@@ -22,37 +22,35 @@ import { postApi } from "@/lib/http";
 import { buscarPorCodigo, buscarProductos } from "@/lib/reglas/busqueda";
 import { centavos } from "@/lib/reglas/dinero";
 import { calcularPrecio } from "@/lib/reglas/precios";
-import { pendienteSchema } from "@/schemas/pendiente.schema";
-import type { GrupoPendiente } from "@/types/pendiente";
+import { cargoSchema } from "@/schemas/pendiente.schema";
+import type { CuentaPendiente } from "@/types/pendiente";
 import type { ProductoVenta } from "@/types/producto";
 
 const CAMPOS = [
-  "cliente",
-  "grupo",
   "productoId",
   "descripcion",
   "cantidad",
   "precioUnitario",
+  "llevadoPor",
+  "nota",
 ] as const;
 type Errores = Partial<Record<(typeof CAMPOS)[number], string>>;
 
-interface ModalNuevoPendienteProps {
-  grupoInicial: GrupoPendiente;
-  /** Clientes que ya tienen pendientes, para sugerir el nombre y no escribirlo distinto. */
-  clientes: { nombre: string; grupo: GrupoPendiente }[];
+interface ModalCargoProps {
+  cuenta: CuentaPendiente;
   onClose: () => void;
 }
 
-/** "+ Nuevo pendiente" (sección 8.8): de un producto (precio del sistema, descuenta stock) o libre. */
-export function ModalNuevoPendiente({ grupoInicial, clientes, onClose }: ModalNuevoPendienteProps) {
+/** Agregar lo que se llevó fiado: de un producto (precio del sistema, descuenta stock) o libre. */
+export function ModalCargo({ cuenta, onClose }: ModalCargoProps) {
   const router = useRouter();
   const toast = useToast();
   const manejarError = useErrorApi();
   const { productos } = useVenta();
-  const listaClientes = useId();
+  const esOrg = cuenta.grupo === "organizacion";
 
-  const [grupo, setGrupo] = useState<GrupoPendiente>(grupoInicial);
-  const [cliente, setCliente] = useState("");
+  const [llevadoPor, setLlevadoPor] = useState("");
+  const [nota, setNota] = useState("");
   const [tipo, setTipo] = useState<"producto" | "libre">("producto");
   const [busqueda, setBusqueda] = useState("");
   const [producto, setProducto] = useState<ProductoVenta | null>(null);
@@ -85,17 +83,15 @@ export function ModalNuevoPendiente({ grupoInicial, clientes, onClose }: ModalNu
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
-    const datos = pendienteSchema.safeParse(
+    const extra = {
+      llevadoPor: llevadoPor || undefined,
+      nota: nota || undefined,
+      cantidad: n || undefined,
+    };
+    const datos = cargoSchema.safeParse(
       tipo === "producto"
-        ? { tipo, cliente, grupo, productoId: producto?.id ?? "", cantidad: n || undefined }
-        : {
-            tipo,
-            cliente,
-            grupo,
-            descripcion,
-            precioUnitario: precio ? Number(precio) : undefined,
-            cantidad: n || undefined,
-          },
+        ? { tipo, productoId: producto?.id ?? "", ...extra }
+        : { tipo, descripcion, precioUnitario: precio ? Number(precio) : undefined, ...extra },
     );
     if (!datos.success) {
       const err: Errores = {};
@@ -109,10 +105,10 @@ export function ModalNuevoPendiente({ grupoInicial, clientes, onClose }: ModalNu
     }
     setEnviando(true);
     try {
-      await postApi("/api/pendientes", datos.data);
-      toast(`Pendiente registrado: ${datos.data.cliente}`, "success");
+      await postApi(`/api/cuentas/${encodeURIComponent(cuenta.id)}/cargos`, datos.data);
+      toast(`Agregado a la cuenta de ${cuenta.nombre}`, "success");
       onClose();
-      router.refresh(); // tabla, total y contador del menú
+      router.refresh(); // cargos, saldo y contador del menú
     } catch (err) {
       manejarError(err);
     } finally {
@@ -124,64 +120,40 @@ export function ModalNuevoPendiente({ grupoInicial, clientes, onClose }: ModalNu
     <Modal
       open
       onClose={onClose}
-      title="Nuevo pendiente"
-      subtitle="Fiado o préstamo: se descuenta del stock al registrarlo"
+      title="Agregar a la cuenta"
+      subtitle={`${cuenta.nombre} · lo que se lleva fiado`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" form="form-pendiente" disabled={enviando}>
+          <Button type="submit" form="form-cargo" disabled={enviando}>
             {enviando && <LoaderCircle className="animate-spin" />}
-            Registrar pendiente
+            Agregar a la cuenta
           </Button>
         </>
       }
     >
-      <form id="form-pendiente" onSubmit={enviar} noValidate className="flex flex-col gap-4">
-        <SegmentedControl
-          ariaLabel="Tipo de cliente"
-          value={grupo}
-          onChange={setGrupo}
-          options={[
-            { value: "individual", label: "Cliente individual" },
-            { value: "organizacion", label: "Organización" },
-          ]}
-          className="w-full"
-        />
-
-        <Field
-          label={grupo === "organizacion" ? "Organización" : "Cliente"}
-          error={errores.cliente}
-        >
-          {(id, desc) => (
-            <>
+      <form id="form-cargo" onSubmit={enviar} noValidate className="flex flex-col gap-4">
+        {esOrg && (
+          <Field
+            label="¿Quién se lo lleva?"
+            hint="Persona de la organización que recoge"
+            error={errores.llevadoPor}
+          >
+            {(id, desc) => (
               <Input
                 id={id}
                 autoFocus
-                list={listaClientes}
                 maxLength={100}
-                placeholder={
-                  grupo === "organizacion" ? "Ej. Escuela El Progreso" : "Ej. Rosa Méndez"
-                }
-                value={cliente}
-                onChange={(e) => {
-                  setCliente(e.target.value);
-                  limpiar("cliente");
-                }}
-                invalid={!!errores.cliente}
+                placeholder="Ej. Ana Ruiz"
+                value={llevadoPor}
+                onChange={(e) => setLlevadoPor(e.target.value)}
                 aria-describedby={desc}
               />
-              <datalist id={listaClientes}>
-                {clientes
-                  .filter((c) => c.grupo === grupo)
-                  .map((c) => (
-                    <option key={c.nombre} value={c.nombre} />
-                  ))}
-              </datalist>
-            </>
-          )}
-        </Field>
+            )}
+          </Field>
+        )}
 
         <SegmentedControl
           ariaLabel="Qué se llevó"
@@ -345,6 +317,20 @@ export function ModalNuevoPendiente({ grupoInicial, clientes, onClose }: ModalNu
             </p>
           </div>
         </div>
+
+        <Field label="Nota (opcional)" error={errores.nota}>
+          {(id, desc) => (
+            <Textarea
+              id={id}
+              rows={2}
+              maxLength={500}
+              placeholder="Ej. Para el acto del viernes; 10 hojas a color y 20 en blanco y negro"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              aria-describedby={desc}
+            />
+          )}
+        </Field>
 
         {precioProducto?.mayoreo && (
           <Alert tone="info">

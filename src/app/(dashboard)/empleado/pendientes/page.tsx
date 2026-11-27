@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Pendientes } from "@/components/pendientes/Pendientes";
-import { obtenerPendientes } from "@/lib/api";
+import { ListaCuentas } from "@/components/pendientes/ListaCuentas";
+import { obtenerCuentas } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Pendientes" };
 
 export default async function Page() {
-  return <Pendientes pendientes={await obtenerPendientes("empleado")} />;
+  return <ListaCuentas cuentas={await obtenerCuentas("empleado")} base="/empleado/pendientes" />;
 }

@@ -1,4 +1,4 @@
-import type { Cliente } from "./proceso";
+import type { Cliente, Cobro } from "./proceso";
 import type { TipoEquipo } from "./servicio";
 
 /** Requisito que el cliente dejó (✓) o no (✗) al registrar la entrada. */
@@ -60,6 +60,11 @@ export interface EntradaTramite extends EntradaBase {
 /** Entrada de servicio técnico: reemplaza el WhatsApp a Oscar (sección 8.10). */
 export interface EntradaServicio extends EntradaBase {
   tipo: "servicio";
+  /** Servicio del catálogo que pidió; vacío si es "revisar la falla". */
+  servicioId?: string;
+  servicioNombre?: string;
+  /** Precio del catálogo calculado por el servidor; sin él, Oscar lo define al revisar. */
+  cobro?: Cobro;
   equipo: TipoEquipo;
   marcaModelo?: string;
   falla: string;

@@ -6,6 +6,7 @@ export * from "./Checkbox";
 export * from "./Chip";
 export * from "./Confirmar";
 export * from "./Counter";
+export * from "./DocumentoImprimible";
 export * from "./Field";
 export * from "./Input";
 export * from "./KpiCard";
