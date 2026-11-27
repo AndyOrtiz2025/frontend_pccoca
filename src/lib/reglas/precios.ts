@@ -22,7 +22,7 @@ export function admiteMayoreo(producto: Pick<Producto, "categoria">): boolean {
 
 /**
  * Precio que se cobra según presentación y cantidad.
- * - Por paquete: precio del paquete, sin mayoreo.
+ * - Por paquete: precio del paquete; a partir de `mayoreoPaquete.desde` paquetes, el de mayoreo.
  * - Por unidad: precio normal; a partir de `mayoreo.desde` unidades, el precio de mayoreo.
  */
 export function calcularPrecio(
@@ -32,8 +32,12 @@ export function calcularPrecio(
 ): PrecioCalculado {
   if (presentacion === "paquete") {
     if (!producto.fraccionable) throw new Error("Este producto no se vende por paquete");
-    const p = producto.fraccionable.precioPaquete;
-    return { unitario: p, normal: p, mayoreo: false };
+    const normal = producto.fraccionable.precioPaquete;
+    const mp = producto.fraccionable.mayoreoPaquete;
+    if (mp && admiteMayoreo(producto) && cantidad >= mp.desde && mp.precio < normal) {
+      return { unitario: mp.precio, normal, mayoreo: true };
+    }
+    return { unitario: normal, normal, mayoreo: false };
   }
 
   const normal = producto.precio;

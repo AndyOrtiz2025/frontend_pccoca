@@ -29,6 +29,8 @@ export interface LineaComprobante {
   codigo: string;
   nombre: string;
   presentacion: Presentacion;
+  /** Si se vendió por paquete: cómo se llama ("Caja", "Bolsa"…), para el comprobante. */
+  nombrePaquete?: string;
   cantidad: number;
   precioUnitario: number;
   subtotal: number;

@@ -5,6 +5,7 @@ import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { Alert, Button, Card, Chip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatQ } from "@/lib/format";
+import { etiquetaPresentacion } from "@/lib/presentacion";
 import { ETIQUETA_MOVIMIENTO } from "@/types/movimiento";
 import { ModalRevisarVenta } from "./ModalRevisarVenta";
 import { useVenta } from "./VentaContext";
@@ -52,7 +53,7 @@ export function PanelCarrito({ className }: { className?: string }) {
                     <div className="mt-1 flex flex-wrap gap-1">
                       {l.tipo !== "venta" && <Chip>{ETIQUETA_MOVIMIENTO[l.tipo]}</Chip>}
                       {l.producto.fraccionable && (
-                        <Chip>{l.presentacion === "unidad" ? "Por unidad" : "Por paquete"}</Chip>
+                        <Chip>{etiquetaPresentacion(l.producto, l.presentacion)}</Chip>
                       )}
                       {l.mayoreo && l.tipo === "venta" && (
                         <Chip tono="bg-gold-100 text-gold-text">Mayoreo</Chip>

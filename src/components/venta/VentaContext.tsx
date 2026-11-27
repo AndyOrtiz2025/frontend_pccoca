@@ -13,6 +13,7 @@ import {
 import { useToast } from "@/components/ui";
 import { useLectorCodigoBarras } from "@/hooks/useLectorCodigoBarras";
 import { useErrorApi } from "@/hooks/useErrorApi";
+import { nombrePaquete } from "@/lib/presentacion";
 import { postApi } from "@/lib/http";
 import {
   agregarLinea,
@@ -146,7 +147,10 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
           );
           actualizarProductos([producto]);
           const u = producto.fraccionable?.unidadesPorPaquete ?? 0;
-          toast(`Se abrió 1 paquete: ${u} unidades sueltas disponibles`, "success");
+          toast(
+            `Se abrió 1 ${nombrePaquete(producto).toLowerCase()}: ${u} unidades sueltas disponibles`,
+            "success",
+          );
           return true;
         } catch (e) {
           manejarError(e);

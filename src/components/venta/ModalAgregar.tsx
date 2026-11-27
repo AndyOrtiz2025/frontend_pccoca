@@ -4,6 +4,12 @@ import { useState } from "react";
 import { Boxes, LoaderCircle, Minus, Plus } from "lucide-react";
 import { Alert, Button, Field, Input, Modal, SegmentedControl, StockChip } from "@/components/ui";
 import { formatQ } from "@/lib/format";
+import {
+  cantidadCon,
+  etiquetaPresentacion,
+  nombrePaquete,
+  pluralPaquete,
+} from "@/lib/presentacion";
 import { presentacionesPermitidas, tiposPermitidos, validarLinea } from "@/lib/reglas/carrito";
 import { centavos } from "@/lib/reglas/dinero";
 import { admiteMayoreo, calcularPrecio } from "@/lib/reglas/precios";
@@ -36,8 +42,11 @@ export function ModalAgregar({
 
   const precio = calcularPrecio(producto, presentacion, cantidad);
   const total = centavos(precio.unitario * cantidad);
-  const m = producto.mayoreo;
-  const muestraMayoreo = presentacion === "unidad" && m && admiteMayoreo(producto);
+  // Mayoreo de la presentación elegida: por unidad o por caja/bolsa/…
+  const m = presentacion === "unidad" ? producto.mayoreo : producto.fraccionable?.mayoreoPaquete;
+  const muestraMayoreo = !!m && admiteMayoreo(producto);
+  const paquete = nombrePaquete(producto).toLowerCase();
+  const enQue = presentacion === "unidad" ? "por unidad" : `por ${paquete}`;
 
   const sinStockPresentacion = producto.fraccionable
     ? presentacion === "unidad"
@@ -130,14 +139,14 @@ export function ModalAgregar({
                 { value: "unidad", label: "Por unidad" },
                 {
                   value: "paquete",
-                  label: `Por paquete (${producto.fraccionable.unidadesPorPaquete} u.)`,
+                  label: `${etiquetaPresentacion(producto, "paquete")} (${producto.fraccionable.unidadesPorPaquete} u.)`,
                 },
               ]}
               className="w-full"
             />
             <p className="text-small text-ink-muted tabular">
               {formatQ(producto.precio)} por unidad · {formatQ(producto.fraccionable.precioPaquete)}{" "}
-              por paquete
+              por {paquete}
             </p>
           </div>
         )}
@@ -188,11 +197,11 @@ export function ModalAgregar({
           </div>
         </div>
 
-        {muestraMayoreo && tipo === "venta" && (
+        {muestraMayoreo && m && tipo === "venta" && (
           <Alert tone="info">
             {precio.mayoreo
-              ? `Mayoreo: el precio cambió de ${formatQ(precio.normal)} a ${formatQ(precio.unitario)} por unidad.`
-              : `Desde ${m.desde} unidades, el precio baja de ${formatQ(producto.precio)} a ${formatQ(m.precio)}.`}
+              ? `Mayoreo: el precio cambió de ${formatQ(precio.normal)} a ${formatQ(precio.unitario)} ${enQue}.`
+              : `Desde ${cantidadCon(producto, presentacion, m.desde)}, el precio baja de ${formatQ(precio.normal)} a ${formatQ(m.precio)} ${enQue}.`}
           </Alert>
         )}
 
@@ -203,13 +212,13 @@ export function ModalAgregar({
               !d.sinPaquetes && (
                 <Button size="sm" variant="secondary" onClick={abrir} disabled={abriendo}>
                   {abriendo ? <LoaderCircle className="animate-spin" /> : <Boxes />}
-                  Abrir nuevo paquete
+                  Abrir 1 {paquete}
                 </Button>
               )
             }
           >
             {d.sinPaquetes
-              ? "Se agotaron las unidades y los paquetes."
+              ? `Se agotaron las unidades sueltas y no quedan ${pluralPaquete(nombrePaquete(producto)).toLowerCase()} sin abrir.`
               : "No quedan unidades sueltas."}
           </Alert>
         )}
@@ -218,12 +227,14 @@ export function ModalAgregar({
             ¿No alcanzan las unidades sueltas?
             <Button size="sm" variant="outline" onClick={abrir} disabled={abriendo}>
               {abriendo ? <LoaderCircle className="animate-spin" /> : <Boxes />}
-              Abrir nuevo paquete
+              Abrir 1 {paquete}
             </Button>
           </p>
         )}
         {producto.fraccionable && presentacion === "paquete" && d.sinPaquetes && (
-          <Alert tone="warning">No quedan paquetes cerrados.</Alert>
+          <Alert tone="warning">
+            No quedan {pluralPaquete(nombrePaquete(producto)).toLowerCase()} sin abrir.
+          </Alert>
         )}
         {!producto.fraccionable && d.agotado && (
           <Alert tone="warning">Este producto está agotado.</Alert>

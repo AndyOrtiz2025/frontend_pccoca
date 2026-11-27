@@ -2,7 +2,7 @@ import "server-only";
 import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
 import type { Cargo, CuentaPendiente, PagoCuenta } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
-import type { Producto } from "@/types/producto";
+import type { Categoria, Producto } from "@/types/producto";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
@@ -40,6 +40,13 @@ interface Almacen {
   pagos: PagoCuenta[];
   /** Contenido de los archivos subidos, por id. */
   archivos: Map<string, { meta: ArchivoAdjunto; datos: Uint8Array }>;
+  /**
+   * Fotos de productos. Separadas de `archivos` a propósito: las ve cualquier usuario con sesión,
+   * mientras que los archivos de trámites (DPI, recibos) solo los ve Paola.
+   */
+  imagenes: Map<string, { tipo: "image/jpeg" | "image/png" | "image/webp"; datos: Uint8Array }>;
+  /** Subcategorías creadas a mano (pueden no tener productos todavía), por categoría. */
+  subcategorias: Record<Categoria, string[]>;
   /** Última vez que Paola u Oscar vaciaron su historial (entregados y descartados). */
   historialVaciado: Partial<Record<"paola" | "oscar", string>>;
 }
@@ -64,6 +71,8 @@ export function almacen(): Almacen {
     pagos: structuredClone(PAGOS_DEMO),
     archivos: archivosDemo(),
     historialVaciado: {},
+    imagenes: new Map(),
+    subcategorias: { libreria: [], tecnologia: [], varios: [] },
   };
   return g.__pccocaAlmacen;
 }

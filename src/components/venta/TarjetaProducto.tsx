@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import { Button, Chip, StockChip } from "@/components/ui";
 import { formatQ } from "@/lib/format";
+import { cantidadCon, nombrePaquete } from "@/lib/presentacion";
 import { admiteMayoreo } from "@/lib/reglas/precios";
 import type { ProductoVenta } from "@/types/producto";
 import { ImagenProducto } from "./ImagenProducto";
@@ -27,7 +28,7 @@ export function TarjetaProducto({
         />
         {producto.fraccionable && (
           <Chip tono="bg-white/90 text-navy-900 shadow-sm" className="absolute top-2 left-2">
-            Unidad / Paquete
+            Unidad / {nombrePaquete(producto)}
           </Chip>
         )}
       </div>
@@ -37,15 +38,21 @@ export function TarjetaProducto({
         <p className="mt-1 text-price font-semibold text-ink-strong tabular">
           {formatQ(producto.precio)}
         </p>
+        {producto.mayoreo && admiteMayoreo(producto) && (
+          <p className="text-small text-ink-muted tabular">
+            Desde {producto.mayoreo.desde} u.: {formatQ(producto.mayoreo.precio)}
+          </p>
+        )}
         {producto.fraccionable && (
           <p className="text-small text-ink-muted tabular">
-            Paquete ({producto.fraccionable.unidadesPorPaquete} u.):{" "}
+            {nombrePaquete(producto)} ({producto.fraccionable.unidadesPorPaquete} u.):{" "}
             {formatQ(producto.fraccionable.precioPaquete)}
           </p>
         )}
-        {producto.mayoreo && admiteMayoreo(producto) && (
+        {producto.fraccionable?.mayoreoPaquete && admiteMayoreo(producto) && (
           <p className="text-small text-ink-muted tabular">
-            Mayoreo desde {producto.mayoreo.desde}: {formatQ(producto.mayoreo.precio)}
+            Desde {cantidadCon(producto, "paquete", producto.fraccionable.mayoreoPaquete.desde)}:{" "}
+            {formatQ(producto.fraccionable.mayoreoPaquete.precio)} c/u
           </p>
         )}
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
