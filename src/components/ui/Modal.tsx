@@ -29,12 +29,19 @@ export function Modal({
 }: ModalProps) {
   const tituloId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  // onClose se guarda en una ref: si el padre pasa una función nueva en cada render,
+  // el efecto NO se vuelve a ejecutar (antes eso le quitaba el foco al campo en cada letra).
+  const cerrar = useRef(onClose);
+  useEffect(() => {
+    cerrar.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const anterior = document.activeElement as HTMLElement | null;
-    panel.current?.focus();
-    const alPresionar = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Solo enfoca el panel si el contenido no puso el foco en un campo (autoFocus).
+    if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
+    const alPresionar = (e: KeyboardEvent) => e.key === "Escape" && cerrar.current();
     document.addEventListener("keydown", alPresionar);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -43,7 +50,7 @@ export function Modal({
       document.body.style.overflow = overflow;
       anterior?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

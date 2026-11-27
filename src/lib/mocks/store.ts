@@ -1,6 +1,8 @@
 import "server-only";
+import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
 import type { Producto } from "@/types/producto";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
+import { ENTRADAS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
@@ -27,6 +29,9 @@ interface Almacen {
   comprobantes: Comprobante[];
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
+  entradas: Entrada[];
+  /** Contenido de los archivos subidos, por id. */
+  archivos: Map<string, { meta: ArchivoAdjunto; datos: Uint8Array }>;
 }
 
 /**
@@ -42,6 +47,8 @@ export function almacen(): Almacen {
     comprobantes: [],
     movimientos: [],
     conversiones: [],
+    entradas: structuredClone(ENTRADAS_DEMO),
+    archivos: new Map(),
   };
   return g.__pccocaAlmacen;
 }

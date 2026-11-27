@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { CatalogoTramites } from "@/components/tramites/CatalogoTramites";
+import { obtenerModulosTramite, obtenerTramites } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Trámites" };
 
-export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Catálogo de trámites (SAT, CGC, RENAP, Otros) con requisitos y precios, y el botón para enviar una entrada a Paola."
-      referencia="Pantallas 8 y 9"
-    />
-  );
+export default async function Page() {
+  const [modulos, tramites] = await Promise.all([obtenerModulosTramite(), obtenerTramites()]);
+  return <CatalogoTramites modulos={modulos} tramites={tramites} />;
 }

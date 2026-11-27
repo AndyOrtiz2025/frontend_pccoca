@@ -65,7 +65,9 @@ export function AppShell({ rol, usuario, contadores, children }: AppShellProps) 
 
         <div className="flex min-h-screen flex-col">
           <Topbar onAbrirMenu={() => setMenuMovil(true)} />
-          <main className="flex-1 p-4 lg:p-6">{children}</main>
+          <main className={cn("flex-1 p-4 lg:p-6", rol === "empleado" && "pb-24 lg:pb-24")}>
+            {children}
+          </main>
         </div>
 
         {rol === "empleado" && (
