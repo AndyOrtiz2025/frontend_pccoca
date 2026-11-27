@@ -9,7 +9,12 @@ import { centavos } from "@/lib/reglas/dinero";
 import { EMPLEADOS_DEMO } from "@/lib/mocks/usuarios";
 import { calcularCarrito, generarComprobante, validarLinea } from "@/lib/reglas/carrito";
 import { calcularPrecio } from "@/lib/reglas/precios";
-import { cobroDeServicio, puedeCambiarEstado } from "@/lib/reglas/procesos";
+import {
+  cobroConPago,
+  cobroDeServicio,
+  precioFijo,
+  puedeCambiarEstado,
+} from "@/lib/reglas/procesos";
 import { resumenVentasDelDia, type ResumenVentas } from "@/lib/reglas/resumen";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
@@ -26,7 +31,8 @@ import type {
   PagoCuenta,
   ResumenCuenta,
 } from "@/types/pendiente";
-import type { EnProceso } from "@/types/proceso";
+import type { EstadoProceso } from "@/types/estados";
+import type { EnProceso, ServicioEnProceso, TramiteEnProceso } from "@/types/proceso";
 import type { Categoria, Producto, ProductoVenta } from "@/types/producto";
 import type { ServicioTecnico } from "@/types/servicio";
 import type { ModuloTramite, Tramite } from "@/types/tramite";
@@ -100,12 +106,22 @@ export async function obtenerProcesos(rol: Rol): Promise<EnProceso[]> {
   return rol === "empleado" ? activos : activos.filter((p) => p.responsable === rol);
 }
 
-/** Bandeja de entradas: Paola recibe las de trámite y Oscar las de servicio. */
-export async function obtenerEntradas(rol: Exclude<Rol, "empleado">): Promise<Entrada[]> {
-  const tipo = rol === "paola" ? "tramite" : "servicio";
+/**
+ * Bandeja de entradas: Paola recibe las de trámite y Oscar las de servicio.
+ * Solo las que faltan por atender: las pasadas a En proceso o descartadas ya no aparecen.
+ */
+export async function obtenerEntradas(rol: Rol): Promise<Entrada[]> {
+  const tipo = tipoDeResponsable(rol);
   return almacen()
-    .entradas.filter((e) => e.tipo === tipo)
+    .entradas.filter((e) => e.tipo === tipo && !e.convertidaEn && !e.descartada)
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
+}
+
+/** Paola atiende trámites y Oscar servicios; el Empleado no administra ninguno. */
+function tipoDeResponsable(rol: Rol): "tramite" | "servicio" {
+  if (rol === "paola") return "tramite";
+  if (rol === "oscar") return "servicio";
+  throw new SinPermisoError();
 }
 
 /** Usuarios: solo Oscar los administra. */
@@ -364,6 +380,186 @@ export async function marcarEntregado(
   }
   proceso.estado = "entregado";
   proceso.entrega = { fecha: ahora.toISOString(), entregadoPor: usuario };
+}
+
+// ─── Bandeja de entradas y procesos (Paola: trámites, Oscar: servicios) ───
+
+/** Busca una entrada pendiente que le toque a ese rol (si no es suya, no la ve). */
+function entradaPendiente(rol: Rol, id: string): Entrada {
+  const tipo = tipoDeResponsable(rol);
+  const entrada = almacen().entradas.find((e) => e.id === id && e.tipo === tipo);
+  if (!entrada) throw new ReglaNegocioError("Esa entrada ya no existe");
+  if (entrada.convertidaEn) throw new ReglaNegocioError("Esa entrada ya está En proceso");
+  if (entrada.descartada) throw new ReglaNegocioError("Esa entrada ya se descartó");
+  return entrada;
+}
+
+/** Al abrirla en la bandeja deja de contar como "no leída" (badge del menú). */
+export async function marcarEntradaLeida(rol: Rol, id: string): Promise<void> {
+  entradaPendiente(rol, id).leida = true;
+}
+
+/** Descartar: llegó repetida o el cliente ya no quiso. No se borra, se conserva. */
+export async function descartarEntrada(
+  rol: Rol,
+  id: string,
+  usuario: string,
+  ahora = new Date(),
+): Promise<void> {
+  const entrada = entradaPendiente(rol, id);
+  entrada.leida = true;
+  entrada.descartada = { fecha: ahora.toISOString(), por: usuario };
+}
+
+/**
+ * "Pasar a En proceso": crea el expediente a partir de la entrada.
+ * - Trámite: precio fijo del catálogo y lo que se acordó en mostrador (cancelado / anticipo).
+ *   Si el precio es variable o pendiente, Paola lo define después.
+ * - Servicio: el cobro que ya calculó el servidor al recibir la entrada (si tenía precio).
+ */
+export async function convertirEntrada(rol: Rol, id: string): Promise<EnProceso> {
+  const entrada = entradaPendiente(rol, id);
+  const base = {
+    id: `${entrada.tipo === "tramite" ? "TP" : "SP"}-${crypto.randomUUID()}`,
+    cliente: entrada.cliente,
+    fechaIngreso: entrada.fecha,
+    estado: "recibido" as const,
+    entradaId: entrada.id,
+    notas: entrada.notas
+      ? [{ autor: entrada.enviadaPor, fecha: entrada.fecha, texto: entrada.notas }]
+      : [],
+  };
+  let proceso: EnProceso;
+  if (entrada.tipo === "tramite") {
+    const tramite = TRAMITES_DEMO.find((t) => t.id === entrada.tramiteId);
+    const precio = tramite ? precioFijo(tramite.precio) : undefined;
+    proceso = {
+      ...base,
+      tipo: "tramite",
+      responsable: "paola",
+      tramiteId: entrada.tramiteId,
+      tramiteNombre: entrada.tramiteNombre,
+      pagoEntrada: entrada.pago,
+      ...(precio !== undefined && { cobro: cobroConPago(precio, entrada.pago) }),
+    } satisfies TramiteEnProceso;
+  } else {
+    proceso = {
+      ...base,
+      tipo: "servicio",
+      responsable: "oscar",
+      equipo: entrada.equipo,
+      marcaModelo: entrada.marcaModelo,
+      falla: entrada.falla,
+      accesorios: entrada.accesorios,
+      ...(entrada.cobro && { cobro: entrada.cobro }),
+    } satisfies ServicioEnProceso;
+  }
+  const a = almacen();
+  a.procesos.push(proceso);
+  entrada.leida = true;
+  entrada.convertidaEn = proceso.id;
+  return proceso;
+}
+
+/** Proceso activo que le toca a ese rol (Paola: trámites, Oscar: servicios). */
+function procesoPropio(rol: Rol, id: string): EnProceso {
+  const proceso = almacen().procesos.find((p) => p.id === id);
+  if (!proceso || proceso.responsable !== rol) {
+    throw new ReglaNegocioError("Ese trámite o servicio ya no existe");
+  }
+  if (proceso.estado === "entregado") throw new ReglaNegocioError("Ya se entregó al cliente");
+  return proceso;
+}
+
+/** Recibido → En proceso → Listo para entregar (al estar listo, lo ve el mostrador). */
+export async function cambiarEstadoProceso(
+  rol: Rol,
+  id: string,
+  nuevo: EstadoProceso,
+): Promise<EnProceso> {
+  const proceso = procesoPropio(rol, id);
+  if (!puedeCambiarEstado(rol, proceso, nuevo)) {
+    throw new ReglaNegocioError("No se puede cambiar a ese estado");
+  }
+  proceso.estado = nuevo;
+  // TODO(backend): notificar a los empleados cuando pasa a "Listo para entregar".
+  return proceso;
+}
+
+/** Nota visible para el mostrador (ej. "Falta confirmar correo de SAT"). */
+export async function agregarNotaProceso(
+  rol: Rol,
+  id: string,
+  autor: string,
+  texto: string,
+  ahora = new Date(),
+): Promise<EnProceso> {
+  const proceso = procesoPropio(rol, id);
+  proceso.notas.push({ autor, fecha: ahora.toISOString(), texto: texto.trim() });
+  return proceso;
+}
+
+/**
+ * Paola u Oscar dicen cuánto cobrar. Se respeta lo que el cliente ya dejó en mostrador.
+ * Si el proceso ya tenía cobro, se conserva el anticipo que tenía.
+ */
+export async function definirCobro(
+  rol: Rol,
+  id: string,
+  total: number,
+  detalle?: string,
+): Promise<EnProceso> {
+  const proceso = procesoPropio(rol, id);
+  const pago =
+    proceso.pagoEntrada ??
+    (proceso.cobro?.anticipo
+      ? { estado: "anticipo" as const, anticipo: proceso.cobro.anticipo }
+      : undefined);
+  try {
+    proceso.cobro = cobroConPago(total, pago, detalle?.trim() || proceso.cobro?.detalle);
+  } catch (e) {
+    throw new ReglaNegocioError((e as Error).message);
+  }
+  return proceso;
+}
+
+// ─── Historial: entregados y descartados (solo Paola u Oscar) ───
+
+export interface Historial {
+  /** Entregados al cliente, los más recientes primero. */
+  entregados: EnProceso[];
+  /** Entradas descartadas en la bandeja. */
+  descartadas: Entrada[];
+  /** Última vez que se vació; `undefined` si nunca. */
+  ultimoVaciado?: string;
+}
+
+/** Lo ya terminado de Paola (trámites) u Oscar (servicios), hasta que lo vacíen. */
+export async function obtenerHistorial(rol: Rol): Promise<Historial> {
+  const tipo = tipoDeResponsable(rol);
+  const a = almacen();
+  return {
+    entregados: a.procesos
+      .filter((p) => p.tipo === tipo && p.estado === "entregado" && !p.archivado)
+      .sort((x, y) => (y.entrega?.fecha ?? "").localeCompare(x.entrega?.fecha ?? "")),
+    descartadas: a.entradas
+      .filter((e) => e.tipo === tipo && e.descartada && !e.archivado)
+      .sort((x, y) => (y.descartada?.fecha ?? "").localeCompare(x.descartada?.fecha ?? "")),
+    ultimoVaciado: a.historialVaciado[rol as "paola" | "oscar"],
+  };
+}
+
+/**
+ * "Vaciar historial": quita de la lista todo lo entregado y descartado hasta ahora.
+ * No se borra: sigue contando en los reportes mensuales. Se recomienda a fin de mes.
+ */
+export async function vaciarHistorial(rol: Rol, ahora = new Date()): Promise<{ quitados: number }> {
+  const { entregados, descartadas } = await obtenerHistorial(rol);
+  const fecha = ahora.toISOString();
+  for (const p of entregados) p.archivado = fecha;
+  for (const e of descartadas) e.archivado = fecha;
+  almacen().historialVaciado[rol as "paola" | "oscar"] = fecha;
+  return { quitados: entregados.length + descartadas.length };
 }
 
 /** Contadores del menú y la campanita, calculados con los datos actuales. */

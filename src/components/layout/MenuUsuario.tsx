@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Camera, ChevronDown, KeyRound, LogOut } from "lucide-react";
 import { useToast } from "@/components/ui";
@@ -22,6 +22,15 @@ export function MenuUsuario() {
   const [abierto, setAbierto] = useState(false);
   const caja = useRef<HTMLDivElement>(null);
   const esAdmin = rol !== "empleado";
+  const ruta = usePathname();
+
+  // Next.js guarda la pantalla al navegar (y al volver a iniciar sesión la restaura tal cual):
+  // el menú se cierra siempre que cambia la página para que no aparezca abierto solo.
+  const [rutaAnterior, setRutaAnterior] = useState(ruta);
+  if (ruta !== rutaAnterior) {
+    setRutaAnterior(ruta);
+    setAbierto(false);
+  }
 
   useEffect(() => {
     if (!abierto) return;
@@ -38,6 +47,7 @@ export function MenuUsuario() {
   }, [abierto]);
 
   async function salir() {
+    setAbierto(false);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     router.replace("/");
     router.refresh();

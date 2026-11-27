@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { HistorialProcesos } from "@/components/procesos/HistorialProcesos";
+import { ProcesosAdmin } from "@/components/procesos/ProcesosAdmin";
+import { obtenerHistorial, obtenerProcesos } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Trámites en proceso" };
 
-export default function Page() {
+/** Pantalla 21: expedientes activos de Paola y, abajo, el historial de entregados y descartados. */
+export default async function Page() {
+  const [procesos, historial] = await Promise.all([
+    obtenerProcesos("paola"),
+    obtenerHistorial("paola"),
+  ]);
   return (
-    <EnConstruccion
-      descripcion="Seguimiento de trámites con estados Recibido, En proceso y Listo para entregar."
-      referencia="Pantalla 22"
-    />
+    <div className="flex flex-col gap-4">
+      <ProcesosAdmin procesos={procesos} />
+      <HistorialProcesos historial={historial} />
+    </div>
   );
 }

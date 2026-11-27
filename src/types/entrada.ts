@@ -40,6 +40,10 @@ interface EntradaBase {
   leida: boolean;
   /** Id del proceso creado al convertirla; si existe, ya no se puede volver a convertir. */
   convertidaEn?: string;
+  /** Paola u Oscar la descartaron (llegó repetida, el cliente se arrepintió…). Se conserva. */
+  descartada?: { fecha: string; por: string };
+  /** Se quitó del historial de descartadas ("Vaciar historial"). */
+  archivado?: string;
 }
 
 /** Entrada de trámite: reemplaza el WhatsApp a Paola (sección 8.9). */
