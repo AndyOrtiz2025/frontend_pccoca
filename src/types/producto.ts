@@ -41,6 +41,11 @@ export interface Fraccionable {
   /** Mayoreo por paquete: a partir de `desde` paquetes, cada uno cuesta `precio`. */
   mayoreoPaquete?: Mayoreo;
   /**
+   * Código de barras de la caja/paquete (ej. "LIB-0045-P" o el del fabricante). Al escanearlo
+   * se vende 1 caja; el `codigoBarras` del producto vende 1 unidad. Opcional.
+   */
+  codigoBarrasPaquete?: string;
+  /**
    * Costo del paquete al proveedor (dato sensible). El costo por unidad (`Producto.costo`) se
    * calcula de aquí: costoPaquete ÷ unidadesPorPaquete.
    */

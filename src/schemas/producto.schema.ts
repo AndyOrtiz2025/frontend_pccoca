@@ -76,6 +76,11 @@ export const productoSchema = z
           })
           .optional(),
         costoPaquete: dinero("El costo por paquete").optional(),
+        codigoBarrasPaquete: z
+          .string()
+          .trim()
+          .regex(CODIGO_BARRAS_REGEX, "Solo letras, números y guion (4 a 32 caracteres)")
+          .optional(),
       })
       .optional(),
     /** Unidades (simple) o paquetes cerrados (fraccionable). Solo se usa al crear. */
@@ -122,6 +127,14 @@ export const productoSchema = z
         code: "custom",
         path: ["fraccionable", "mayoreoPaquete", "precio"],
         message: "El mayoreo debe ser menor al precio normal",
+      });
+    }
+    const barrasCaja = p.fraccionable?.codigoBarrasPaquete?.toUpperCase();
+    if (barrasCaja && [p.codigo, (p.codigoBarras ?? p.codigo).toUpperCase()].includes(barrasCaja)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["fraccionable", "codigoBarrasPaquete"],
+        message: "El código de la caja debe ser distinto al de la unidad",
       });
     }
     if (p.aplicaConsumoInterno && p.categoria === "varios") {

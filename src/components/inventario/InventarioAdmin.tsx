@@ -7,6 +7,8 @@ import {
   Boxes,
   Download,
   PackageMinus,
+  Printer,
+  ScanBarcode,
   Pencil,
   Plus,
   Power,
@@ -17,6 +19,7 @@ import {
 import {
   Button,
   Card,
+  Checkbox,
   Chip,
   Confirmar,
   KpiCard,
@@ -48,6 +51,10 @@ import { ETIQUETA_CATEGORIA, type Categoria, type Producto } from "@/types/produ
 import type { Proveedor } from "@/types/proveedor";
 import type { Subcategoria } from "@/lib/api";
 import { ModalMerma } from "./ModalMerma";
+import { ModalCodigoBarras } from "@/components/codigos/ModalCodigoBarras";
+import { ModalEtiquetas } from "@/components/codigos/ModalEtiquetas";
+import { useLectorCodigoBarras } from "@/hooks/useLectorCodigoBarras";
+import { buscarPorEscaneo } from "@/lib/reglas/busqueda";
 import { ModalProducto } from "./ModalProducto";
 import { ModalSubcategorias } from "./ModalSubcategorias";
 
@@ -82,6 +89,10 @@ export function InventarioAdmin({
   const [editando, setEditando] = useState<Producto | "nuevo" | null>(null);
   const [mermando, setMermando] = useState<Producto | null>(null);
   const [aDesactivar, setADesactivar] = useState<Producto | null>(null);
+  const [viendoCodigo, setViendoCodigo] = useState<Producto | null>(null);
+  const [etiquetas, setEtiquetas] = useState<Producto[] | null>(null);
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
+  const [resaltado, setResaltado] = useState<string | null>(null);
 
   const resumen = useMemo(() => resumenInventario(productos), [productos]);
   const subcategorias = useMemo(
@@ -111,6 +122,58 @@ export function InventarioAdmin({
 
   const paginaActual = Math.min(pagina, Math.max(1, Math.ceil(visibles.length / POR_PAGINA)));
   const enPagina = visibles.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
+
+  const hayVentana =
+    !!editando ||
+    !!mermando ||
+    !!aDesactivar ||
+    !!viendoCodigo ||
+    !!etiquetas ||
+    viendoSubcategorias;
+
+  // Escanear con el lector en esta pantalla busca el producto (unidad o caja) y lo resalta.
+  useLectorCodigoBarras((codigo) => {
+    const r = buscarPorEscaneo(productos, codigo);
+    if (!r) {
+      toast(
+        `No hay ningún producto de ${ETIQUETA_CATEGORIA[categoria]} con el código ${codigo}`,
+        "warning",
+      );
+      return;
+    }
+    setPestana(r.producto.activo ? "todos" : "inactivos");
+    setSubcategoria("");
+    setConsulta(r.producto.codigo);
+    setPagina(1);
+    setResaltado(r.producto.id);
+    toast(
+      r.presentacion === "paquete"
+        ? `${r.producto.nombre} (código por ${nombrePaquete(r.producto).toLowerCase()})`
+        : r.producto.nombre,
+      "info",
+    );
+  }, !hayVentana);
+
+  const seleccionados = productos.filter((p) => seleccion.has(p.id));
+  const todosEnPagina = enPagina.length > 0 && enPagina.every((p) => seleccion.has(p.id));
+  function alternar(id: string) {
+    setSeleccion((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function alternarPagina() {
+    setSeleccion((s) => {
+      const n = new Set(s);
+      for (const p of enPagina) {
+        if (todosEnPagina) n.delete(p.id);
+        else n.add(p.id);
+      }
+      return n;
+    });
+  }
 
   function exportar() {
     const csv = inventarioCsv(productos);
@@ -230,6 +293,23 @@ export function InventarioAdmin({
           </Select>
         </div>
 
+        {seleccionados.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-y border-gold-500/40 bg-gold-100/60 px-4 py-2">
+            <span className="text-body font-semibold text-ink-strong">
+              {seleccionados.length} {seleccionados.length === 1 ? "seleccionado" : "seleccionados"}
+            </span>
+            <Button size="sm" onClick={() => setEtiquetas(seleccionados)}>
+              <Printer /> Imprimir etiquetas
+            </Button>
+            <button
+              type="button"
+              onClick={() => setSeleccion(new Set())}
+              className="text-small font-semibold text-navy-900 hover:underline"
+            >
+              Quitar selección
+            </button>
+          </div>
+        )}
         {enPagina.length === 0 ? (
           <p className="px-5 pt-4 pb-10 text-center text-body text-ink-muted">
             No hay productos en esta vista.
@@ -238,13 +318,21 @@ export function InventarioAdmin({
           <Table>
             <THead>
               <tr>
+                <Th className="w-10">
+                  <Checkbox
+                    checked={todosEnPagina}
+                    onChange={alternarPagina}
+                    label="Seleccionar todos de esta página"
+                    ocultarTexto
+                  />
+                </Th>
                 <Th>Producto</Th>
                 <Th numeric>Precio</Th>
                 <Th numeric>Mayoreo</Th>
                 <Th numeric>Costo</Th>
                 <Th numeric>Margen</Th>
                 <Th>Stock exacto</Th>
-                <Th className="w-28">
+                <Th className="w-36">
                   <span className="sr-only">Acciones</span>
                 </Th>
               </tr>
@@ -254,6 +342,10 @@ export function InventarioAdmin({
                 <FilaProducto
                   key={p.id}
                   p={p}
+                  seleccionado={seleccion.has(p.id)}
+                  resaltado={resaltado === p.id}
+                  onSeleccionar={() => alternar(p.id)}
+                  onCodigo={() => setViendoCodigo(p)}
                   onEditar={() => setEditando(p)}
                   onMerma={() => setMermando(p)}
                   onActivo={() => (p.activo ? setADesactivar(p) : cambiarActivo(p, true))}
@@ -306,6 +398,17 @@ export function InventarioAdmin({
           onClose={() => setViendoSubcategorias(false)}
         />
       )}
+      {viendoCodigo && (
+        <ModalCodigoBarras
+          producto={viendoCodigo}
+          onClose={() => setViendoCodigo(null)}
+          onImprimir={() => {
+            setEtiquetas([viendoCodigo]);
+            setViendoCodigo(null);
+          }}
+        />
+      )}
+      {etiquetas && <ModalEtiquetas productos={etiquetas} onClose={() => setEtiquetas(null)} />}
       {mermando && <ModalMerma producto={mermando} onClose={() => setMermando(null)} />}
       {aDesactivar && (
         <Confirmar
@@ -330,11 +433,19 @@ export function InventarioAdmin({
 
 function FilaProducto({
   p,
+  seleccionado,
+  resaltado,
+  onSeleccionar,
+  onCodigo,
   onEditar,
   onMerma,
   onActivo,
 }: {
   p: Producto;
+  seleccionado: boolean;
+  resaltado: boolean;
+  onSeleccionar: () => void;
+  onCodigo: () => void;
   onEditar: () => void;
   onMerma: () => void;
   onActivo: () => void;
@@ -349,7 +460,15 @@ function FilaProducto({
     "flex size-8 items-center justify-center rounded-sm text-ink-muted hover:bg-gray-100 hover:text-navy-900 [&_svg]:size-4";
 
   return (
-    <Tr className={p.activo ? undefined : "opacity-60"}>
+    <Tr selected={resaltado} className={p.activo ? undefined : "opacity-60"}>
+      <Td>
+        <Checkbox
+          checked={seleccionado}
+          onChange={onSeleccionar}
+          label={`Seleccionar ${p.nombre}`}
+          ocultarTexto
+        />
+      </Td>
       <Td className="py-2.5">
         <div className="flex items-center gap-3">
           <ImagenProducto
@@ -433,6 +552,15 @@ function FilaProducto({
       </Td>
       <Td>
         <div className="flex justify-end gap-0.5">
+          <button
+            type="button"
+            className={accion}
+            onClick={onCodigo}
+            title="Código de barras"
+            aria-label={`Código de barras de ${p.nombre}`}
+          >
+            <ScanBarcode />
+          </button>
           <button
             type="button"
             className={accion}

@@ -153,6 +153,10 @@
   @page {
     margin: 0; /* quita la fecha y el título que el navegador pone arriba y abajo */
   }
+  @page hoja-etiquetas {
+    size: letter;
+    margin: 0;
+  }
   body:has(> .capa-impresion) > :not(.capa-impresion) {
     display: none !important;
   }
@@ -185,6 +189,24 @@
     max-width: 190mm !important;
     margin: 0 auto !important;
     padding: 12mm !important;
+  }
+  /* Hojas de etiquetas: tamaño carta exacto, sin márgenes; una hoja impresa por cada hoja. */
+  .zona-impresion.hojas-etiquetas {
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: none !important;
+  }
+  .hoja-etiquetas {
+    page: hoja-etiquetas;
+    zoom: 1 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+  }
+  .hoja-etiquetas:last-child {
+    break-after: auto;
   }
   /* Ticket de 80 mm (impresora térmica) o centrado arriba en una hoja carta al guardar PDF. */
   .zona-impresion.ticket {

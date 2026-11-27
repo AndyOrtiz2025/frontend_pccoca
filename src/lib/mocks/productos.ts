@@ -70,6 +70,7 @@ export const PRODUCTOS_DEMO: Producto[] = [
       precioPaquete: 22,
       mayoreoPaquete: { desde: 5, precio: 20 },
       costoPaquete: 18,
+      codigoBarrasPaquete: "LIB-0045-P",
     },
     stock: { tipo: "fraccionable", paquetes: 20, sueltas: 0, referenciaPaquetes: 20 },
     proveedorId: "prov-3",

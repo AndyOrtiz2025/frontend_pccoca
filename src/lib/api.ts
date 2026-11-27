@@ -111,16 +111,27 @@ function productoAdministrado(rol: Rol, id: string): Producto {
   return producto;
 }
 
-/** El código interno y el de barras no se repiten en todo el catálogo (los usa el escáner). */
+/**
+ * El código interno y los códigos de barras (unidad y caja) no se repiten en todo el
+ * catálogo: el escáner los usa para saber qué producto y qué presentación vender.
+ */
 function validarCodigosUnicos(datos: ProductoInput, excluirId?: string) {
   const barras = (datos.codigoBarras || datos.codigo).toUpperCase();
+  const barrasCaja = datos.fraccionable?.codigoBarrasPaquete?.toUpperCase();
   for (const p of almacen().productos) {
     if (p.id === excluirId) continue;
     if (p.codigo === datos.codigo) {
       throw new ReglaNegocioError(`El código ${datos.codigo} ya es de "${p.nombre}"`);
     }
-    if (p.codigoBarras.toUpperCase() === barras || p.codigo === barras) {
+    const ocupados = [p.codigo, p.codigoBarras.toUpperCase()];
+    if (p.fraccionable?.codigoBarrasPaquete) {
+      ocupados.push(p.fraccionable.codigoBarrasPaquete.toUpperCase());
+    }
+    if (ocupados.includes(barras)) {
       throw new ReglaNegocioError(`Ese código de barras ya es de "${p.nombre}"`);
+    }
+    if (barrasCaja && ocupados.includes(barrasCaja)) {
+      throw new ReglaNegocioError(`El código de la caja ya es de "${p.nombre}"`);
     }
   }
 }

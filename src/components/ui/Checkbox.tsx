@@ -8,12 +8,21 @@ interface CheckboxProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  /** Oculta el texto (sigue disponible para lectores de pantalla), ej. en tablas. */
+  ocultarTexto?: boolean;
   disabled?: boolean;
   className?: string;
 }
 
 /** Casilla de 16px: marcada en azul medianoche con palomita blanca (sección 7.5). */
-export function Checkbox({ checked, onChange, label, disabled, className }: CheckboxProps) {
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+  ocultarTexto,
+  disabled,
+  className,
+}: CheckboxProps) {
   const id = useId();
   return (
     <label
@@ -39,7 +48,7 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
           className="pointer-events-none absolute inset-0.5 size-3 text-white opacity-0 peer-checked:opacity-100"
         />
       </span>
-      <span>{label}</span>
+      <span className={ocultarTexto ? "sr-only" : undefined}>{label}</span>
     </label>
   );
 }
