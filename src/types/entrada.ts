@@ -7,6 +7,30 @@ export interface DocumentoEntregado {
   entregado: boolean;
 }
 
+/** Estado del pago del trámite al dejarlo (pedido de Paola). */
+export type EstadoPago = "cancelado" | "pendiente" | "anticipo";
+
+export const ETIQUETA_PAGO: Record<EstadoPago, string> = {
+  cancelado: "Cancelado",
+  pendiente: "No cancelado",
+  anticipo: "Anticipo",
+};
+
+export interface PagoEntrada {
+  estado: EstadoPago;
+  /** Solo si estado = "anticipo": cuánto dejó el cliente. */
+  anticipo?: number;
+}
+
+/** Archivo que el Empleado subió con la entrada (DPI escaneado, recibo de luz…). */
+export interface ArchivoAdjunto {
+  id: string;
+  nombre: string;
+  /** Tipo detectado por el servidor a partir del contenido, no por la extensión. */
+  tipo: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+  tamano: number;
+}
+
 interface EntradaBase {
   id: string;
   cliente: Cliente;
@@ -24,6 +48,13 @@ export interface EntradaTramite extends EntradaBase {
   tramiteId: string;
   tramiteNombre: string;
   documentos: DocumentoEntregado[];
+  pago: PagoEntrada;
+  archivos: ArchivoAdjunto[];
+  /**
+   * Datos que dictó el cliente (correo, NIT, usuario y contraseña de agencia virtual…).
+   * DATO SENSIBLE: solo lo ve Paola; nunca se muestra en Seguimiento. El backend lo guarda cifrado.
+   */
+  datosCliente?: string;
 }
 
 /** Entrada de servicio técnico: reemplaza el WhatsApp a Oscar (sección 8.10). */

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -13,6 +12,8 @@ import {
 } from "react";
 import { useToast } from "@/components/ui";
 import { useLectorCodigoBarras } from "@/hooks/useLectorCodigoBarras";
+import { useErrorApi } from "@/hooks/useErrorApi";
+import { postApi } from "@/lib/http";
 import {
   agregarLinea,
   calcularCarrito,
@@ -54,26 +55,6 @@ export function useVentaOpcional(): VentaValue | null {
   return useContext(VentaContext);
 }
 
-class ErrorApi extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
-
-async function llamar<T>(url: string, cuerpo?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-  });
-  const datos = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new ErrorApi(datos.error ?? "Ocurrió un error. Intenta de nuevo.", res.status);
-  return datos;
-}
-
 interface VentaProviderProps {
   usuario: string;
   productosIniciales: ProductoVenta[];
@@ -83,7 +64,6 @@ interface VentaProviderProps {
 /** Estado de venta del Empleado: catálogo, carrito, modales y confirmación. */
 export function VentaProvider({ usuario, productosIniciales, children }: VentaProviderProps) {
   const toast = useToast();
-  const router = useRouter();
   const [productos, setProductos] = useState(productosIniciales);
   const [seleccionado, setSeleccionado] = useState<ProductoVenta | null>(null);
   const [comprobante, setComprobante] = useState<Comprobante | null>(null);
@@ -118,14 +98,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
     [productos, toast],
   );
 
-  /** Muestra el error; si la sesión venció, vuelve a la pantalla de perfiles. */
-  const manejarError = useCallback(
-    (e: unknown) => {
-      toast((e as Error).message, "danger");
-      if (e instanceof ErrorApi && e.status === 401) router.replace("/");
-    },
-    [toast, router],
-  );
+  const manejarError = useErrorApi();
 
   // Lector de código de barras: funciona en cualquier pantalla del Empleado.
   useLectorCodigoBarras(abrirPorCodigo, !seleccionado && !comprobante);
@@ -143,7 +116,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
       vaciar: () => carritoStore.set([]),
       abrirPaquete: async (productoId) => {
         try {
-          const { producto } = await llamar<{ producto: ProductoVenta }>(
+          const { producto } = await postApi<{ producto: ProductoVenta }>(
             `/api/productos/${encodeURIComponent(productoId)}/abrir-paquete`,
           );
           actualizarProductos([producto]);
@@ -158,7 +131,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
       confirmar: async () => {
         setConfirmando(true);
         try {
-          const r = await llamar<{
+          const r = await postApi<{
             comprobante: Comprobante | null;
             consumos: number;
             mermas: number;

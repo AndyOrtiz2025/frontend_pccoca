@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { CatalogoServicios } from "@/components/servicios/CatalogoServicios";
+import { obtenerServicios } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Servicios Técnicos" };
 
-export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Catálogo de servicios técnicos de Oscar y el botón para enviar una entrada de servicio."
-      referencia="Pantalla 10"
-    />
-  );
+export default async function Page() {
+  return <CatalogoServicios servicios={await obtenerServicios("empleado")} />;
 }

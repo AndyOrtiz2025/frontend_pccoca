@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entradaServicioSchema, entradaTramiteSchema } from "./entrada.schema";
+import { entradaServicioSchema, entradaTramiteSchema, pagoSchema } from "./entrada.schema";
 import { pendienteSchema } from "./pendiente.schema";
 import { mermaSchema, productoSchema, type ProductoInput } from "./producto.schema";
 import { nuevoEmpleadoSchema } from "./usuario.schema";
@@ -77,6 +77,7 @@ describe("entradas", () => {
         cliente: { nombre: "Ana", telefono: "" },
         tramiteId: "sat-nit",
         documentos: [],
+        pago: { estado: "pendiente" },
       }).success,
     ).toBe(true);
     expect(
@@ -84,6 +85,7 @@ describe("entradas", () => {
         cliente: { nombre: "Ana", telefono: "123" },
         tramiteId: "sat-nit",
         documentos: [],
+        pago: { estado: "pendiente" },
       }).success,
     ).toBe(false);
   });
@@ -105,6 +107,23 @@ describe("entradas", () => {
         accesorios: [],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("pagoSchema", () => {
+  it("exige elegir el estado", () => {
+    expect(pagoSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("anticipo exige monto mayor a 0", () => {
+    expect(pagoSchema.safeParse({ estado: "anticipo" }).success).toBe(false);
+    expect(pagoSchema.safeParse({ estado: "anticipo", anticipo: 0 }).success).toBe(false);
+    expect(pagoSchema.safeParse({ estado: "anticipo", anticipo: 25 }).success).toBe(true);
+  });
+
+  it("si no es anticipo, descarta el monto", () => {
+    const r = pagoSchema.safeParse({ estado: "cancelado", anticipo: 25 });
+    expect(r.success && r.data).toEqual({ estado: "cancelado" });
   });
 });
 
