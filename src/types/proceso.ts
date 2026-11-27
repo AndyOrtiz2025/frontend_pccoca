@@ -21,6 +21,11 @@ interface ProcesoBase {
   notas: NotaProceso[];
   /** Entrada de la que salió, si se convirtió desde una (secciones 9.3.1 y 10.5). */
   entradaId?: string;
+  /**
+   * Cuándo y quién lo entregó. Al entregarse deja de mostrarse en todas las listas,
+   * pero se conserva para los reportes y por si el cliente reclama.
+   */
+  entrega?: { fecha: string; entregadoPor: string };
 }
 
 /** Trámite en proceso que gestiona Paola (sección 9.3). */

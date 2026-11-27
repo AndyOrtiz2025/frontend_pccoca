@@ -22,6 +22,8 @@ export function useLectorCodigoBarras(alLeer: (codigo: string) => void, activo =
     function alPresionar(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      // Con una ventana abierta (ej. Nuevo pendiente) el escáner no agrega al carrito.
+      if (document.querySelector('[role="dialog"]')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const ahora = performance.now();

@@ -128,16 +128,36 @@ describe("pagoSchema", () => {
 });
 
 describe("pendienteSchema", () => {
-  it("cantidad entera positiva", () => {
-    const ok = {
-      cliente: "Rosa",
-      grupo: "individual",
-      descripcion: "Cuaderno",
-      cantidad: 3,
-      precioUnitario: 15,
-    };
-    expect(pendienteSchema.safeParse(ok).success).toBe(true);
-    expect(pendienteSchema.safeParse({ ...ok, cantidad: 1.5 }).success).toBe(false);
+  const prod = {
+    tipo: "producto",
+    cliente: "Rosa",
+    grupo: "individual",
+    productoId: "p-1",
+    cantidad: 3,
+  };
+  const libre = {
+    tipo: "libre",
+    cliente: "COCODE",
+    grupo: "organizacion",
+    descripcion: "Impresiones",
+    cantidad: 30,
+    precioUnitario: 2,
+  };
+
+  it("de producto no lleva precio: lo pone el servidor", () => {
+    expect(pendienteSchema.safeParse(prod).success).toBe(true);
+    const r = pendienteSchema.safeParse({ ...prod, precioUnitario: 0.01 });
+    expect(r.success && "precioUnitario" in r.data).toBe(false);
+  });
+
+  it("libre exige descripción y precio", () => {
+    expect(pendienteSchema.safeParse(libre).success).toBe(true);
+    expect(pendienteSchema.safeParse({ ...libre, precioUnitario: undefined }).success).toBe(false);
+  });
+
+  it("cantidad entera positiva y grupo obligatorio", () => {
+    expect(pendienteSchema.safeParse({ ...prod, cantidad: 1.5 }).success).toBe(false);
+    expect(pendienteSchema.safeParse({ ...prod, grupo: undefined }).success).toBe(false);
   });
 });
 

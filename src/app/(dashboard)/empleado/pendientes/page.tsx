@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { Pendientes } from "@/components/pendientes/Pendientes";
+import { obtenerPendientes } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Pendientes" };
 
-export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Registro de fiados y préstamos, separado por organizaciones y clientes individuales."
-      referencia="Pantalla 11"
-    />
-  );
+export default async function Page() {
+  return <Pendientes pendientes={await obtenerPendientes("empleado")} />;
 }

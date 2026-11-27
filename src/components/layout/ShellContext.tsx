@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { Rol } from "@/lib/auth/roles";
-import type { Contadores } from "@/lib/mocks/contadores";
+import type { Contadores } from "@/types/contadores";
 
 export interface UsuarioShell {
   nombre: string;

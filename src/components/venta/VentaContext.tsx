@@ -33,8 +33,11 @@ interface VentaValue {
   calculado: CarritoCalculado;
   confirmando: boolean;
   abrirProducto: (producto: ProductoVenta) => void;
-  /** Busca por código exacto (lector o teclado). Devuelve false si no existe. */
-  abrirPorCodigo: (codigo: string) => boolean;
+  /**
+   * Código exacto (lector de barras o tecleado): agrega 1 unidad directo al carrito.
+   * Devuelve false si el código no existe.
+   */
+  escanear: (codigo: string) => boolean;
   agregar: (linea: LineaCarrito) => void;
   cambiar: (indice: number, cantidad: number) => void;
   vaciar: () => void;
@@ -85,14 +88,35 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
     setSeleccionado((s) => (s && nuevos.get(s.id)) ?? s);
   }, []);
 
-  const abrirPorCodigo = useCallback(
+  const escanear = useCallback(
     (codigo: string) => {
       const p = buscarPorCodigo(productos, codigo);
       if (!p) {
         toast(`No hay ningún producto con el código ${codigo}`, "warning");
         return false;
       }
-      setSeleccionado(p);
+      const d = p.disponibilidad;
+      if (d.agotado) {
+        toast(`${p.nombre} está agotado`, "warning");
+        return true;
+      }
+      // Sin unidades sueltas: se abre la ventana para "Abrir nuevo paquete" o vender por paquete.
+      if (p.fraccionable && d.sinSueltas) {
+        setSeleccionado(p);
+        return true;
+      }
+      // Directo al carrito: 1 unidad como venta. La cantidad se cambia en el carrito.
+      const nuevo = agregarLinea(carritoStore.get(), {
+        productoId: p.id,
+        tipo: "venta",
+        presentacion: "unidad",
+        cantidad: 1,
+      });
+      carritoStore.set(nuevo);
+      const linea = nuevo.find(
+        (l) => l.productoId === p.id && l.tipo === "venta" && l.presentacion === "unidad",
+      );
+      toast(`✓ ${p.nombre} agregado (${linea?.cantidad ?? 1} en el carrito)`, "success");
       return true;
     },
     [productos, toast],
@@ -101,7 +125,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
   const manejarError = useErrorApi();
 
   // Lector de código de barras: funciona en cualquier pantalla del Empleado.
-  useLectorCodigoBarras(abrirPorCodigo, !seleccionado && !comprobante);
+  useLectorCodigoBarras(escanear, !seleccionado && !comprobante);
 
   const valor = useMemo<VentaValue>(
     () => ({
@@ -110,7 +134,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
       calculado,
       confirmando,
       abrirProducto: setSeleccionado,
-      abrirPorCodigo,
+      escanear,
       agregar: (linea) => carritoStore.set(agregarLinea(carritoStore.get(), linea)),
       cambiar: (i, cantidad) => carritoStore.set(cambiarCantidad(carritoStore.get(), i, cantidad)),
       vaciar: () => carritoStore.set([]),
@@ -153,16 +177,7 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
         }
       },
     }),
-    [
-      productos,
-      lineas,
-      calculado,
-      confirmando,
-      abrirPorCodigo,
-      actualizarProductos,
-      manejarError,
-      toast,
-    ],
+    [productos, lineas, calculado, confirmando, escanear, actualizarProductos, manejarError, toast],
   );
 
   return (
