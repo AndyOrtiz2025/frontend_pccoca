@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { MessageSquare } from "lucide-react";
 import { RecuperarForm } from "@/components/acceso/RecuperarForm";
 import { ModalComentario } from "@/components/comentarios/ModalComentario";
+import { useVentaOpcional } from "@/components/venta/VentaContext";
 import { Modal } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { Rol } from "@/lib/auth/roles";
@@ -24,17 +25,22 @@ export function AppShell({ rol, usuario, contadores, children }: AppShellProps) 
   const [menuMovil, setMenuMovil] = useState(false);
   const [comentario, setComentario] = useState(false);
   const [cambiarPassword, setCambiarPassword] = useState(false);
+  const venta = useVentaOpcional();
+  const productosEnCarrito = venta?.lineas.length;
 
   const valor = useMemo<ShellValue>(
     () => ({
       rol,
       usuario,
-      contadores,
+      contadores:
+        productosEnCarrito === undefined
+          ? contadores
+          : { ...contadores, carrito: productosEnCarrito },
       abrirComentario: () => setComentario(true),
       abrirCambiarPassword: () => setCambiarPassword(true),
       cerrarMenuMovil: () => setMenuMovil(false),
     }),
-    [rol, usuario, contadores],
+    [rol, usuario, contadores, productosEnCarrito],
   );
 
   return (

@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { PanelCarrito } from "@/components/venta/PanelCarrito";
 
 export const metadata: Metadata = { title: "Carrito" };
 
+/** Carrito a lo ancho: revisar y confirmar sin pasar por el catálogo. */
 export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Revisión del carrito, confirmación de la venta y comprobante interno."
-      referencia="Pantalla 7"
-    />
-  );
+  return <PanelCarrito className="mx-auto max-w-2xl" />;
 }

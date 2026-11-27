@@ -2,12 +2,14 @@ import "server-only";
 import type { Rol } from "@/lib/auth/roles";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "@/lib/mocks/procesos";
 import { PENDIENTES_DEMO } from "@/lib/mocks/pendientes";
-import { PRODUCTOS_DEMO } from "@/lib/mocks/productos";
 import { SERVICIOS_DEMO } from "@/lib/mocks/servicios";
 import { MODULOS_TRAMITE_DEMO, TRAMITES_DEMO } from "@/lib/mocks/tramites";
+import { almacen } from "@/lib/mocks/store";
 import { EMPLEADOS_DEMO } from "@/lib/mocks/usuarios";
-import { aVistaEmpleado } from "@/lib/reglas/inventario";
+import { calcularCarrito, generarComprobante, validarLinea } from "@/lib/reglas/carrito";
+import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import type { Entrada } from "@/types/entrada";
+import type { Comprobante, LineaCarrito } from "@/types/movimiento";
 import type { Pendiente } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto, ProductoVenta } from "@/types/producto";
@@ -39,18 +41,22 @@ export class SinPermisoError extends Error {
 
 /** Catálogo para vender (vista Empleado): sin costo ni stock exacto. */
 export async function obtenerCatalogoVenta(categoria: Categoria): Promise<ProductoVenta[]> {
-  return PRODUCTOS_DEMO.filter((p) => p.activo && p.categoria === categoria).map(aVistaEmpleado);
+  return almacen()
+    .productos.filter((p) => p.activo && p.categoria === categoria)
+    .map(aVistaEmpleado);
 }
 
 /** Todos los productos que se pueden vender, para el buscador y el lector de código de barras. */
 export async function obtenerTodosParaVenta(): Promise<ProductoVenta[]> {
-  return PRODUCTOS_DEMO.filter((p) => p.activo).map(aVistaEmpleado);
+  return almacen()
+    .productos.filter((p) => p.activo)
+    .map(aVistaEmpleado);
 }
 
 /** Productos completos (con costo y stock exacto) solo para quien administra esa categoría. */
 export async function obtenerProductosAdmin(rol: Rol, categoria: Categoria): Promise<Producto[]> {
   if (rol === "empleado" || !CATEGORIAS_ADMIN[rol].includes(categoria)) throw new SinPermisoError();
-  return PRODUCTOS_DEMO.filter((p) => p.categoria === categoria);
+  return almacen().productos.filter((p) => p.categoria === categoria);
 }
 
 export async function obtenerModulosTramite(): Promise<ModuloTramite[]> {
@@ -92,4 +98,102 @@ export async function obtenerPendientes(rol: Rol): Promise<Pendiente[]> {
 export async function obtenerEmpleados(rol: Rol): Promise<Empleado[]> {
   if (rol !== "oscar") throw new SinPermisoError();
   return EMPLEADOS_DEMO;
+}
+
+// ─── Mutaciones ───────────────────────────────────────────────
+
+/** Error de una regla de negocio: se muestra tal cual al usuario (HTTP 409). */
+export class ReglaNegocioError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReglaNegocioError";
+  }
+}
+
+export interface ResultadoVenta {
+  /** null si el carrito solo tenía consumo interno o merma (no generan comprobante). */
+  comprobante: Comprobante | null;
+  consumos: number;
+  mermas: number;
+  /** Productos afectados, ya con el semáforo actualizado (vista Empleado). */
+  productos: ProductoVenta[];
+}
+
+/**
+ * Confirma el carrito (sección 8.7). Todo o nada: si una línea falla, no se descuenta nada.
+ * Los precios se calculan AQUÍ con los datos del servidor; el navegador solo manda qué y cuánto.
+ */
+export async function registrarVenta(
+  lineas: LineaCarrito[],
+  atendio: string,
+  ahora = new Date(),
+): Promise<ResultadoVenta> {
+  const a = almacen();
+  if (lineas.length === 0) throw new ReglaNegocioError("El carrito está vacío");
+
+  const porId = new Map(a.productos.map((p) => [p.id, p]));
+  const nuevosStocks = new Map<string, Producto["stock"]>();
+
+  for (const linea of lineas) {
+    const producto = porId.get(linea.productoId);
+    if (!producto || !producto.activo)
+      throw new ReglaNegocioError("Un producto del carrito ya no existe");
+    const error = validarLinea(linea, aVistaEmpleado(producto));
+    if (error) throw new ReglaNegocioError(`${producto.nombre}: ${error}`);
+    const actual = nuevosStocks.get(producto.id) ?? producto.stock;
+    try {
+      nuevosStocks.set(producto.id, descontarStock(actual, linea.presentacion, linea.cantidad));
+    } catch (e) {
+      throw new ReglaNegocioError(`${producto.nombre}: ${(e as Error).message}`);
+    }
+  }
+
+  const fecha = ahora.toISOString();
+  const calculado = calcularCarrito(
+    lineas,
+    new Map([...porId].map(([id, p]) => [id, aVistaEmpleado(p)])),
+  );
+  const comprobante = generarComprobante(calculado, { id: `V-${ahora.getTime()}`, fecha, atendio });
+
+  // Todo validado: ahora sí se aplica.
+  for (const [id, stock] of nuevosStocks) porId.get(id)!.stock = stock;
+  if (comprobante) a.comprobantes.push(comprobante);
+  lineas
+    .filter((l) => l.tipo !== "venta")
+    .forEach((l, i) =>
+      a.movimientos.push({
+        id: `M-${ahora.getTime()}-${i}`,
+        tipo: l.tipo as "consumo_interno" | "merma",
+        productoId: l.productoId,
+        presentacion: l.presentacion,
+        cantidad: l.cantidad,
+        motivo: l.motivo?.trim() || undefined,
+        fecha,
+        registradoPor: atendio,
+      }),
+    );
+
+  return {
+    comprobante,
+    consumos: calculado.cantidadConsumos,
+    mermas: calculado.cantidadMermas,
+    productos: [...nuevosStocks.keys()].map((id) => aVistaEmpleado(porId.get(id)!)),
+  };
+}
+
+/** "Abrir nuevo paquete" (sección 11.5). Cualquier rol con acceso a ventas. */
+export async function abrirPaqueteProducto(
+  productoId: string,
+  usuario: string,
+): Promise<ProductoVenta> {
+  const a = almacen();
+  const producto = a.productos.find((p) => p.id === productoId);
+  if (!producto?.fraccionable) throw new ReglaNegocioError("Este producto no se vende por paquete");
+  try {
+    producto.stock = abrirPaquete(producto.stock, producto.fraccionable.unidadesPorPaquete);
+  } catch (e) {
+    throw new ReglaNegocioError((e as Error).message);
+  }
+  a.conversiones.push({ productoId, fecha: new Date().toISOString(), registradoPor: usuario });
+  return aVistaEmpleado(producto);
 }

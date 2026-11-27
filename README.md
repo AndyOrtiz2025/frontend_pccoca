@@ -28,6 +28,9 @@ La galería de componentes está en <http://localhost:3000/componentes>.
 
 Están en `src/lib/auth/mock-users.ts` y se borran cuando el login se conecte al backend.
 
+Mientras no hay backend, las ventas, mermas y "Abrir nuevo paquete" se guardan **en memoria**
+(`src/lib/mocks/store.ts`): se reinician cada vez que se detiene `npm run dev`.
+
 En producción (`npm run build && npm start`) la app exige `SESSION_SECRET` en el `.env.local`.
 
 ## Scripts

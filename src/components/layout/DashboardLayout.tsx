@@ -1,4 +1,6 @@
 import { Suspense, type ReactNode } from "react";
+import { VentaProvider } from "@/components/venta/VentaContext";
+import { obtenerTodosParaVenta } from "@/lib/api";
 import { obtenerSesion } from "@/lib/auth/server";
 import { PERFILES, type Rol } from "@/lib/auth/roles";
 import { CONTADORES_DEMO } from "@/lib/mocks/contadores";
@@ -8,7 +10,7 @@ async function ShellConSesion({ rol, children }: { rol: Rol; children: ReactNode
   const sesion = await obtenerSesion();
   // El proxy ya garantiza que hay sesión y que es de este rol; esto es solo por seguridad de tipos.
   const nombre = sesion?.rol === rol ? sesion.nombre : PERFILES[rol].nombre;
-  return (
+  const shell = (
     <AppShell
       rol={rol}
       usuario={{ nombre, cargo: PERFILES[rol].cargo }}
@@ -16,6 +18,17 @@ async function ShellConSesion({ rol, children }: { rol: Rol; children: ReactNode
     >
       {children}
     </AppShell>
+  );
+  if (rol !== "empleado") return shell;
+
+  // Solo el Empleado vende (sección 9.1): recibe el catálogo SIN costo ni stock exacto.
+  return (
+    <VentaProvider
+      usuario={sesion?.usuario ?? nombre}
+      productosIniciales={await obtenerTodosParaVenta()}
+    >
+      {shell}
+    </VentaProvider>
   );
 }
 

@@ -28,7 +28,7 @@ describe("descontarStock", () => {
   });
 
   it("no abre paquetes sola si faltan sueltas", () => {
-    expect(() => descontarStock(fracc, "unidad", 9)).toThrow(/abre un nuevo paquete/);
+    expect(() => descontarStock(fracc, "unidad", 9)).toThrow(/Abre un nuevo paquete/);
   });
 
   it("rechaza cantidades no enteras o cero", () => {

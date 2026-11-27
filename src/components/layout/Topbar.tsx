@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, Menu, ShoppingBag } from "lucide-react";
-import { Counter, SearchInput } from "@/components/ui";
+import { Counter } from "@/components/ui";
+import { BuscadorProductos } from "@/components/venta/BuscadorProductos";
 import { tituloDeRuta } from "@/lib/navegacion";
 import { MenuUsuario } from "./MenuUsuario";
 import { useShell } from "./ShellContext";
@@ -33,14 +34,7 @@ export function Topbar({ onAbrirMenu }: TopbarProps) {
       <h1 className="truncate text-h1 font-light text-ink-strong">{titulo}</h1>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
-        {esEmpleado && (
-          // TODO(productos): el buscador y el lector de código de barras se conectan en el PR de catálogo.
-          <SearchInput
-            aria-label="Buscar producto o código"
-            placeholder="Buscar producto o código"
-            className="hidden w-64 md:block"
-          />
-        )}
+        {esEmpleado && <BuscadorProductos className="hidden w-72 md:block" />}
 
         {esEmpleado && (
           <Link
