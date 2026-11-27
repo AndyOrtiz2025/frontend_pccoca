@@ -1,6 +1,8 @@
 import type { Rol } from "@/lib/auth/roles";
 import type { EstadoProceso } from "@/types/estados";
-import type { EnProceso } from "@/types/proceso";
+import type { Cobro, EnProceso } from "@/types/proceso";
+import type { ServicioTecnico } from "@/types/servicio";
+import { centavos } from "./dinero";
 
 /** Orden del flujo: Recibido → En proceso → Listo para entregar → Entregado (sección 11.8). */
 export const ORDEN_ESTADOS: EstadoProceso[] = ["recibido", "en_proceso", "listo", "entregado"];
@@ -34,4 +36,28 @@ export function puedeCambiarEstado(
 /** Al pasar a "Listo para entregar" se notifica a todos los empleados (sección 8.11). */
 export function notificaEmpleados(nuevo: EstadoProceso): boolean {
   return nuevo === "listo";
+}
+
+/** Lo que falta cobrar al entregar: total menos lo que el cliente ya dejó. */
+export function porCobrar(cobro: Cobro): number {
+  return Math.max(0, centavos(cobro.total - (cobro.anticipo ?? 0)));
+}
+
+/**
+ * Precio de un servicio según el catálogo:
+ * - Con opciones: el de la opción elegida (es obligatorio elegir una).
+ * - Con precio fijo: ese precio.
+ * - Sin precio o con rango: `undefined`, Oscar dice cuánto cobrar al revisar.
+ * Lanza un error con mensaje para el usuario si la opción no es válida.
+ */
+export function cobroDeServicio(servicio: ServicioTecnico, opcionId?: string): Cobro | undefined {
+  if (servicio.opciones?.length) {
+    const opcion = servicio.opciones.find((o) => o.id === opcionId);
+    if (!opcion) throw new Error(`Elige una opción de "${servicio.nombre}"`);
+    return { total: opcion.precio, detalle: `${servicio.nombre} · ${opcion.nombre}` };
+  }
+  if (opcionId) throw new Error(`"${servicio.nombre}" no tiene opciones`);
+  const { monto, montoMax } = servicio.precio;
+  if (monto === null || montoMax !== undefined) return undefined;
+  return { total: monto, detalle: servicio.nombre };
 }

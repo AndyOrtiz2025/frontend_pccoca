@@ -13,6 +13,18 @@ export interface NotaProceso {
   texto: string;
 }
 
+/**
+ * Cuánto se le cobra al cliente al entregar. Sale del catálogo (precio fijo u opción elegida)
+ * o lo define Oscar/Paola después de revisar.
+ */
+export interface Cobro {
+  total: number;
+  /** Lo que el cliente ya dejó al registrar la entrada. */
+  anticipo?: number;
+  /** Ej. "Activación de Office · 1 año". */
+  detalle?: string;
+}
+
 interface ProcesoBase {
   id: string;
   cliente: Cliente;
@@ -21,6 +33,8 @@ interface ProcesoBase {
   notas: NotaProceso[];
   /** Entrada de la que salió, si se convirtió desde una (secciones 9.3.1 y 10.5). */
   entradaId?: string;
+  /** Sin `cobro`: el responsable todavía no dice cuánto cobrar. */
+  cobro?: Cobro;
   /**
    * Cuándo y quién lo entregó. Al entregarse deja de mostrarse en todas las listas,
    * pero se conserva para los reportes y por si el cliente reclama.

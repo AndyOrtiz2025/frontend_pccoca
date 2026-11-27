@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Send, Wrench } from "lucide-react";
 import { Button, Card, Chip, SearchInput } from "@/components/ui";
-import { formatPrecio } from "@/lib/format";
+import { formatPrecio, formatQ } from "@/lib/format";
 import { normalizar } from "@/lib/reglas/busqueda";
 import type { ServicioTecnico } from "@/types/servicio";
 import { IconoServicio } from "./IconoServicio";
@@ -12,7 +12,7 @@ import { ModalEntradaServicio } from "./ModalEntradaServicio";
 /** Pantalla 10: catálogo de servicios técnicos de Oscar (solo consulta) + "Enviar entrada". */
 export function CatalogoServicios({ servicios }: { servicios: ServicioTecnico[] }) {
   const [consulta, setConsulta] = useState("");
-  const [modal, setModal] = useState<{ servicio?: string } | null>(null);
+  const [modal, setModal] = useState<{ servicioId?: string } | null>(null);
 
   const visibles = useMemo(() => {
     const palabras = normalizar(consulta).split(/\s+/).filter(Boolean);
@@ -58,7 +58,7 @@ export function CatalogoServicios({ servicios }: { servicios: ServicioTecnico[] 
                     {s.nombre}
                   </h3>
                   <p className="mt-1 text-small text-ink-muted">
-                    {s.descripcion ?? "Descripción pendiente de definir por Oscar."}
+                    {s.descripcion ?? "Oscar revisa el equipo y dice cuánto cobrar."}
                   </p>
                 </div>
               </div>
@@ -66,18 +66,12 @@ export function CatalogoServicios({ servicios }: { servicios: ServicioTecnico[] 
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setModal({ servicio: s.nombre })}
+                  onClick={() => setModal({ servicioId: s.id })}
                   aria-label={`Enviar entrada: ${s.nombre}`}
                 >
                   <Send /> Enviar entrada
                 </Button>
-                {s.precio.monto === null ? (
-                  <Chip>Pendiente</Chip>
-                ) : (
-                  <p className="text-price font-semibold text-ink-strong tabular">
-                    {formatPrecio(s.precio)}
-                  </p>
-                )}
+                <PrecioServicio servicio={s} />
               </div>
             </article>
           ))}
@@ -85,8 +79,36 @@ export function CatalogoServicios({ servicios }: { servicios: ServicioTecnico[] 
       )}
 
       {modal && (
-        <ModalEntradaServicio servicioInicial={modal.servicio} onClose={() => setModal(null)} />
+        <ModalEntradaServicio
+          servicios={servicios}
+          servicioInicialId={modal.servicioId}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
+  );
+}
+
+/** Opciones con su precio, precio fijo o "Según revisión" si Oscar lo define al ver el equipo. */
+function PrecioServicio({ servicio }: { servicio: ServicioTecnico }) {
+  if (servicio.opciones?.length) {
+    return (
+      <ul className="text-right">
+        {servicio.opciones.map((o) => (
+          <li key={o.id} className="text-small text-ink-muted">
+            {o.nombre}{" "}
+            <span className="text-body font-semibold text-ink-strong tabular">
+              {formatQ(o.precio)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (servicio.precio.monto === null) return <Chip>Según revisión</Chip>;
+  return (
+    <p className="text-price font-semibold text-ink-strong tabular">
+      {formatPrecio(servicio.precio)}
+    </p>
   );
 }

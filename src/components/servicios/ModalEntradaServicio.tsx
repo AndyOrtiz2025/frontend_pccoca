@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { LoaderCircle } from "lucide-react";
+import { Info, LoaderCircle } from "lucide-react";
 import {
   Button,
   Checkbox,
@@ -15,30 +15,38 @@ import {
 } from "@/components/ui";
 import { useErrorApi } from "@/hooks/useErrorApi";
 import { postApi } from "@/lib/http";
+import { cn } from "@/lib/cn";
+import { formatQ } from "@/lib/format";
+import { cobroDeServicio } from "@/lib/reglas/procesos";
 import { entradaServicioSchema } from "@/schemas/entrada.schema";
-import { TIPOS_EQUIPO, type TipoEquipo } from "@/types/servicio";
+import { TIPOS_EQUIPO, type ServicioTecnico, type TipoEquipo } from "@/types/servicio";
 
 /** Accesorios más comunes; lo demás se escribe en "Otros accesorios". */
 const ACCESORIOS_COMUNES = ["Cargador", "Estuche", "Mouse", "Cable USB", "Memoria / SD", "Caja"];
 
-const CAMPOS = ["nombre", "telefono", "equipo", "falla"] as const;
+const CAMPOS = ["nombre", "telefono", "equipo", "falla", "opcionId"] as const;
 type Errores = Partial<Record<(typeof CAMPOS)[number], string>>;
 
 /** Variante de la pantalla 9: el Empleado registra un equipo que dejó un cliente. Se notifica a Oscar. */
 export function ModalEntradaServicio({
-  servicioInicial,
+  servicios,
+  servicioInicialId,
   onClose,
 }: {
-  servicioInicial?: string;
+  servicios: ServicioTecnico[];
+  servicioInicialId?: string;
   onClose: () => void;
 }) {
   const toast = useToast();
   const manejarError = useErrorApi();
+  const [servicioId, setServicioId] = useState(servicioInicialId ?? "");
+  const [opcionId, setOpcionId] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [equipo, setEquipo] = useState<TipoEquipo | "">("");
   const [marcaModelo, setMarcaModelo] = useState("");
-  const [falla, setFalla] = useState(servicioInicial ? `${servicioInicial}. ` : "");
+  const inicial = servicios.find((x) => x.id === servicioInicialId);
+  const [falla, setFalla] = useState(inicial ? `${inicial.nombre}. ` : "");
   const [accesorios, setAccesorios] = useState<Set<string>>(new Set());
   const [otros, setOtros] = useState("");
   const [notas, setNotas] = useState("");
@@ -48,9 +56,35 @@ export function ModalEntradaServicio({
   /** Al corregir un campo, su mensaje de error desaparece. */
   const limpiar = (campo: keyof Errores) => setErrores((e) => ({ ...e, [campo]: undefined }));
 
+  const servicio = servicios.find((x) => x.id === servicioId);
+  // Vista previa del precio; el servidor lo vuelve a calcular con el catálogo.
+  let cobro: ReturnType<typeof cobroDeServicio>;
+  try {
+    cobro = servicio ? cobroDeServicio(servicio, opcionId || undefined) : undefined;
+  } catch {
+    cobro = undefined; // falta elegir la opción
+  }
+
+  function elegirServicio(id: string) {
+    const anterior = servicios.find((x) => x.id === servicioId);
+    const nuevo = servicios.find((x) => x.id === id);
+    setServicioId(id);
+    setOpcionId("");
+    limpiar("opcionId");
+    // Si la falla solo tenía el nombre del servicio anterior, se cambia por el nuevo.
+    if (!falla.trim() || (anterior && falla.trim() === `${anterior.nombre}.`)) {
+      setFalla(nuevo ? `${nuevo.nombre}. ` : "");
+    }
+  }
+
   async function enviar(e: FormEvent) {
     e.preventDefault();
+    if (servicio?.opciones?.length && !opcionId) {
+      return setErrores({ opcionId: `Elige una opción de ${servicio.nombre}` });
+    }
     const datos = entradaServicioSchema.safeParse({
+      servicioId: servicioId || undefined,
+      opcionId: opcionId || undefined,
       cliente: { nombre, telefono },
       equipo: equipo || undefined,
       marcaModelo: marcaModelo || undefined,
@@ -117,6 +151,72 @@ export function ModalEntradaServicio({
         noValidate
         className="grid gap-4 sm:grid-cols-2"
       >
+        <Field label="Servicio que pide" className="sm:col-span-2">
+          {(id) => (
+            <Select id={id} value={servicioId} onChange={(e) => elegirServicio(e.target.value)}>
+              <option value="">Revisar falla (Oscar dice cuánto cobrar)</option>
+              {servicios.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.nombre}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        {servicio?.opciones?.length ? (
+          <fieldset className="sm:col-span-2">
+            <legend className="mb-1.5 text-small font-medium text-ink">Opción</legend>
+            <div role="radiogroup" className="grid gap-2 sm:grid-cols-2">
+              {servicio.opciones.map((o) => {
+                const activa = o.id === opcionId;
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={activa}
+                    onClick={() => {
+                      setOpcionId(o.id);
+                      limpiar("opcionId");
+                    }}
+                    className={cn(
+                      "flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
+                      activa
+                        ? "border-navy-900 bg-navy-900 text-white"
+                        : "border-gray-300 bg-white text-ink-strong hover:border-navy-900",
+                    )}
+                  >
+                    <span className="text-body font-medium">{o.nombre}</span>
+                    <span className="text-body font-semibold tabular">{formatQ(o.precio)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {errores.opcionId && (
+              <p role="alert" className="mt-1 text-small text-stock-out">
+                {errores.opcionId}
+              </p>
+            )}
+          </fieldset>
+        ) : null}
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-small sm:col-span-2",
+            cobro ? "bg-stock-ok-bg text-stock-ok-text" : "bg-gray-100 text-ink-muted",
+          )}
+        >
+          <Info className="size-4 shrink-0" />
+          {cobro ? (
+            <span>
+              Precio: <strong className="tabular">{formatQ(cobro.total)}</strong>
+              {servicio?.opciones?.length ? ` (${cobro.detalle})` : ""}
+            </span>
+          ) : servicio?.opciones?.length ? (
+            <span>Elige una opción para ver el precio.</span>
+          ) : (
+            <span>Sin precio fijo: Oscar dirá cuánto cobrar después de revisar el equipo.</span>
+          )}
+        </div>
         <Field label="Cliente" error={errores.nombre}>
           {(id, desc) => (
             <Input

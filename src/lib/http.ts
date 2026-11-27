@@ -13,12 +13,21 @@ export class ErrorApi extends Error {
  * POST a una ruta /api propia (BFF). Lanza ErrorApi con el mensaje del servidor si falla.
  * Si el cuerpo es FormData (archivos), el navegador pone solo el Content-Type multipart.
  */
-export async function postApi<T>(url: string, cuerpo?: unknown): Promise<T> {
+export function postApi<T>(url: string, cuerpo?: unknown): Promise<T> {
+  return pedirApi<T>("POST", url, cuerpo);
+}
+
+/** Igual que postApi, para PATCH y DELETE. */
+export async function pedirApi<T>(
+  metodo: "POST" | "PATCH" | "DELETE",
+  url: string,
+  cuerpo?: unknown,
+): Promise<T> {
   let res: Response;
   const esForm = cuerpo instanceof FormData;
   try {
     res = await fetch(url, {
-      method: "POST",
+      method: metodo,
       headers: esForm ? undefined : { "Content-Type": "application/json" },
       body: cuerpo === undefined ? undefined : esForm ? cuerpo : JSON.stringify(cuerpo),
     });

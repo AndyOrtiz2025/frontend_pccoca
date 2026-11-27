@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BellRing, CircleCheck, ClipboardList, Phone, X } from "lucide-react";
+import { BellRing, CircleAlert, CircleCheck, ClipboardList, Phone, X } from "lucide-react";
 import {
   Alert,
   Button,
@@ -23,8 +23,10 @@ import {
 import { useErrorApi } from "@/hooks/useErrorApi";
 import { cn } from "@/lib/cn";
 import { formatFechaHora, haceCuanto } from "@/lib/fechas";
+import { formatQ } from "@/lib/format";
 import { postApi } from "@/lib/http";
 import { normalizar } from "@/lib/reglas/busqueda";
+import { porCobrar } from "@/lib/reglas/procesos";
 import type { EstadoProceso } from "@/types/estados";
 import type { EnProceso } from "@/types/proceso";
 
@@ -146,8 +148,9 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
                   <Th>Cliente</Th>
                   <Th>{tipo === "tramite" ? "Trámite" : "Equipo"}</Th>
                   <Th>Ingreso</Th>
+                  <Th numeric>A cobrar</Th>
                   <Th>Estado</Th>
-                  <Th className="w-40">
+                  <Th className={seleccionado ? "w-12" : "w-40"}>
                     <span className="sr-only">Acción</span>
                   </Th>
                 </tr>
@@ -163,20 +166,18 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
                     <Td className="font-semibold whitespace-nowrap text-ink-strong">
                       {p.cliente.nombre}
                     </Td>
-                    <Td>
-                      <Chip
-                        tono={
-                          p.tipo === "tramite"
-                            ? "bg-st-recibido-bg text-navy-900"
-                            : "bg-gold-100 text-gold-text"
-                        }
-                      >
-                        {p.tipo === "tramite" ? "Trámite" : "Servicio"}
-                      </Chip>
-                    </Td>
                     <Td className="max-w-64 truncate">{detalle(p)}</Td>
                     <Td className="whitespace-nowrap text-ink-muted">
                       {haceCuanto(p.fechaIngreso)}
+                    </Td>
+                    <Td numeric className="whitespace-nowrap">
+                      {p.cobro ? (
+                        <span className="font-semibold text-ink-strong">
+                          {formatQ(porCobrar(p.cobro))}
+                        </span>
+                      ) : (
+                        <span className="text-small text-ink-muted">Por definir</span>
+                      )}
                     </Td>
                     <Td>
                       <StatusChip estado={p.estado} />
@@ -186,13 +187,20 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
                         <Button
                           size="sm"
                           variant="outline"
+                          title="Marcar entregado"
                           className="border-stock-ok/40 text-stock-ok-text hover:bg-stock-ok-bg"
                           onClick={(e) => {
                             e.stopPropagation();
                             setAEntregar(p);
                           }}
                         >
-                          <CircleCheck /> Marcar entregado
+                          <CircleCheck />
+                          {/* Con el panel abierto no cabe el texto: queda solo el ícono. */}
+                          {seleccionado ? (
+                            <span className="sr-only">Marcar entregado</span>
+                          ) : (
+                            "Marcar entregado"
+                          )}
                         </Button>
                       )}
                     </Td>
@@ -268,6 +276,7 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
                 </>
               )}
             </dl>
+            <DetalleCobro proceso={seleccionado} />
             {seleccionado.notas.length > 0 && (
               <div className="flex flex-col gap-2 border-t border-gray-200 px-5 py-4">
                 <h3 className="text-small font-semibold text-ink-strong">
@@ -307,11 +316,57 @@ export function Seguimiento({ procesos, tipo }: SeguimientoProps) {
           <p>
             <strong>{aEntregar.cliente.nombre}</strong> · {detalle(aEntregar)}
           </p>
+          {aEntregar.cobro ? (
+            <p className="mt-2 text-body">
+              Cobra <strong className="tabular">{formatQ(porCobrar(aEntregar.cobro))}</strong> antes
+              de entregar.
+            </p>
+          ) : (
+            <p className="mt-2 text-body text-stock-low-text">
+              {aEntregar.responsable === "paola" ? "Paola" : "Oscar"} aún no dice cuánto cobrar.
+              Pregúntale antes de entregar.
+            </p>
+          )}
           <p className="mt-2 text-ink-muted">
             Al confirmar, desaparece de Seguimiento. Esto no se puede deshacer.
           </p>
         </Confirmar>
       )}
     </div>
+  );
+}
+
+/** Cuánto cobrar al entregar: lo define Oscar (servicios) o Paola (trámites). */
+function DetalleCobro({ proceso }: { proceso: EnProceso }) {
+  const quien = proceso.responsable === "paola" ? "Paola" : "Oscar";
+  const { cobro } = proceso;
+  if (!cobro) {
+    return (
+      <div className="border-t border-gray-200 px-5 py-4">
+        <p className="flex items-start gap-2 rounded-md bg-stock-low-bg px-3 py-2 text-small text-stock-low-text">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          {quien} aún no dice cuánto cobrar. Pregúntale antes de entregar.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <dl className="flex flex-col gap-2 border-t border-gray-200 px-5 py-4 text-body">
+      <div className="flex justify-between gap-3">
+        <dt className="text-ink-muted">Total</dt>
+        <dd className="text-right tabular">{formatQ(cobro.total)}</dd>
+      </div>
+      {cobro.detalle && <p className="-mt-1 text-small text-ink-muted">{cobro.detalle}</p>}
+      {!!cobro.anticipo && (
+        <div className="flex justify-between gap-3">
+          <dt className="text-ink-muted">Ya dejó</dt>
+          <dd className="text-right text-stock-ok-text tabular">−{formatQ(cobro.anticipo)}</dd>
+        </div>
+      )}
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="font-semibold text-ink-strong">Cobrar al entregar</dt>
+        <dd className="text-price font-bold text-navy-900 tabular">{formatQ(porCobrar(cobro))}</dd>
+      </div>
+    </dl>
   );
 }

@@ -12,6 +12,7 @@ export const PROCESOS_DEMO: EnProceso[] = [
     cliente: { nombre: "María López", telefono: "5412-8890" },
     fechaIngreso: "2026-11-25T10:45:00-06:00",
     estado: "listo",
+    cobro: { total: 30, anticipo: 10, detalle: "Certificado de nacimiento" },
     notas: [
       {
         autor: "Paola",
@@ -29,6 +30,7 @@ export const PROCESOS_DEMO: EnProceso[] = [
     cliente: { nombre: "Juan Carlos Castillo", telefono: "4220-1199" },
     fechaIngreso: "2026-11-25T09:15:00-06:00",
     estado: "en_proceso",
+    cobro: { total: 130 },
     notas: [],
   },
   {
@@ -65,6 +67,7 @@ export const PROCESOS_DEMO: EnProceso[] = [
     cliente: { nombre: "Juan Pérez", telefono: "3105-7762" },
     fechaIngreso: "2026-11-24T14:00:00-06:00",
     estado: "listo",
+    cobro: { total: 150, detalle: "Mantenimiento y cambio de pasta térmica" },
     notas: [
       { autor: "Oscar", fecha: "2026-11-25T12:00:00-06:00", texto: "Se cambió pasta térmica" },
     ],

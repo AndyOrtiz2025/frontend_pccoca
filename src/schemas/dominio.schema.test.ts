@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { entradaServicioSchema, entradaTramiteSchema, pagoSchema } from "./entrada.schema";
-import { pendienteSchema } from "./pendiente.schema";
+import { cargoSchema, cuentaSchema } from "./pendiente.schema";
 import { mermaSchema, productoSchema, type ProductoInput } from "./producto.schema";
 import { nuevoEmpleadoSchema } from "./usuario.schema";
 
@@ -127,37 +127,43 @@ describe("pagoSchema", () => {
   });
 });
 
-describe("pendienteSchema", () => {
-  const prod = {
-    tipo: "producto",
-    cliente: "Rosa",
-    grupo: "individual",
-    productoId: "p-1",
-    cantidad: 3,
-  };
+describe("cargoSchema", () => {
+  const prod = { tipo: "producto", productoId: "p-1", cantidad: 3 };
   const libre = {
     tipo: "libre",
-    cliente: "COCODE",
-    grupo: "organizacion",
     descripcion: "Impresiones",
     cantidad: 30,
     precioUnitario: 2,
+    llevadoPor: "Ana",
   };
 
   it("de producto no lleva precio: lo pone el servidor", () => {
-    expect(pendienteSchema.safeParse(prod).success).toBe(true);
-    const r = pendienteSchema.safeParse({ ...prod, precioUnitario: 0.01 });
+    expect(cargoSchema.safeParse(prod).success).toBe(true);
+    const r = cargoSchema.safeParse({ ...prod, precioUnitario: 0.01 });
     expect(r.success && "precioUnitario" in r.data).toBe(false);
   });
 
   it("libre exige descripción y precio", () => {
-    expect(pendienteSchema.safeParse(libre).success).toBe(true);
-    expect(pendienteSchema.safeParse({ ...libre, precioUnitario: undefined }).success).toBe(false);
+    expect(cargoSchema.safeParse(libre).success).toBe(true);
+    expect(cargoSchema.safeParse({ ...libre, precioUnitario: undefined }).success).toBe(false);
   });
 
-  it("cantidad entera positiva y grupo obligatorio", () => {
-    expect(pendienteSchema.safeParse({ ...prod, cantidad: 1.5 }).success).toBe(false);
-    expect(pendienteSchema.safeParse({ ...prod, grupo: undefined }).success).toBe(false);
+  it("cantidad entera positiva", () => {
+    expect(cargoSchema.safeParse({ ...prod, cantidad: 1.5 }).success).toBe(false);
+    expect(cargoSchema.safeParse({ ...prod, cantidad: 0 }).success).toBe(false);
+  });
+});
+
+describe("cuentaSchema", () => {
+  it("exige nombre y grupo; teléfono opcional de 8 dígitos", () => {
+    expect(
+      cuentaSchema.safeParse({ nombre: "Centro Estudiantil", grupo: "organizacion", telefono: "" })
+        .success,
+    ).toBe(true);
+    expect(cuentaSchema.safeParse({ nombre: "X", grupo: "individual" }).success).toBe(false);
+    expect(
+      cuentaSchema.safeParse({ nombre: "Ana", grupo: "individual", telefono: "123" }).success,
+    ).toBe(false);
   });
 });
 
