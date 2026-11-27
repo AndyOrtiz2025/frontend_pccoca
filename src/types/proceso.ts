@@ -1,3 +1,4 @@
+import type { PagoEntrada } from "./entrada";
 import type { EstadoProceso } from "./estados";
 import type { TipoEquipo } from "./servicio";
 
@@ -36,10 +37,17 @@ interface ProcesoBase {
   /** Sin `cobro`: el responsable todavía no dice cuánto cobrar. */
   cobro?: Cobro;
   /**
+   * Lo que se acordó en mostrador al recibirlo (cancelado, no cancelado o anticipo). Sirve para
+   * calcular lo que falta cobrar cuando Paola u Oscar definen el precio después.
+   */
+  pagoEntrada?: PagoEntrada;
+  /**
    * Cuándo y quién lo entregó. Al entregarse deja de mostrarse en todas las listas,
    * pero se conserva para los reportes y por si el cliente reclama.
    */
   entrega?: { fecha: string; entregadoPor: string };
+  /** Paola u Oscar lo quitaron de su historial ("Vaciar historial"). Sigue contando en reportes. */
+  archivado?: string;
 }
 
 /** Trámite en proceso que gestiona Paola (sección 9.3). */

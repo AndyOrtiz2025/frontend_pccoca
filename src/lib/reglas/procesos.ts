@@ -1,7 +1,9 @@
 import type { Rol } from "@/lib/auth/roles";
 import type { EstadoProceso } from "@/types/estados";
 import type { Cobro, EnProceso } from "@/types/proceso";
+import type { PagoEntrada } from "@/types/entrada";
 import type { ServicioTecnico } from "@/types/servicio";
+import type { Precio } from "@/types/tramite";
 import { centavos } from "./dinero";
 
 /** Orden del flujo: Recibido → En proceso → Listo para entregar → Entregado (sección 11.8). */
@@ -67,4 +69,31 @@ export function describirProceso(p: EnProceso): string {
   return p.tipo === "tramite"
     ? p.tramiteNombre
     : `${p.equipo}${p.marcaModelo ? ` ${p.marcaModelo}` : ""}`;
+}
+
+/** Precio fijo del catálogo; `undefined` si está pendiente o es un rango ("según vehículo"). */
+export function precioFijo(precio: Precio): number | undefined {
+  return precio.monto !== null && precio.montoMax === undefined ? precio.monto : undefined;
+}
+
+/**
+ * Cobro de un total tomando en cuenta lo que se acordó en mostrador:
+ * - Cancelado: ya pagó todo (no hay nada que cobrar al entregar).
+ * - Anticipo: se descuenta lo que dejó.
+ * - No cancelado: se cobra todo al entregar.
+ * Lanza un error si lo que ya dejó el cliente es más que el total.
+ */
+export function cobroConPago(total: number, pago?: PagoEntrada, detalle?: string): Cobro {
+  const t = centavos(total);
+  const base: Cobro = { total: t, ...(detalle && { detalle }) };
+  if (pago?.estado === "cancelado") return { ...base, anticipo: t };
+  if (pago?.estado === "anticipo" && pago.anticipo) {
+    if (pago.anticipo > t) {
+      throw new Error(
+        `El cliente ya dejó Q ${pago.anticipo.toFixed(2)}: el total no puede ser menor`,
+      );
+    }
+    return { ...base, anticipo: centavos(pago.anticipo) };
+  }
+  return base;
 }

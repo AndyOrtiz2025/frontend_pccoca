@@ -40,6 +40,8 @@ interface Almacen {
   pagos: PagoCuenta[];
   /** Contenido de los archivos subidos, por id. */
   archivos: Map<string, { meta: ArchivoAdjunto; datos: Uint8Array }>;
+  /** Última vez que Paola u Oscar vaciaron su historial (entregados y descartados). */
+  historialVaciado: Partial<Record<"paola" | "oscar", string>>;
 }
 
 /**
@@ -60,7 +62,8 @@ export function almacen(): Almacen {
     cuentas: structuredClone(CUENTAS_DEMO),
     cargos: structuredClone(CARGOS_DEMO),
     pagos: structuredClone(PAGOS_DEMO),
-    archivos: new Map(),
+    archivos: archivosDemo(),
+    historialVaciado: {},
   };
   return g.__pccocaAlmacen;
 }
@@ -68,4 +71,35 @@ export function almacen(): Almacen {
 /** Solo para pruebas: vuelve a los datos iniciales. */
 export function reiniciarAlmacen() {
   g.__pccocaAlmacen = undefined;
+}
+
+/** PDF mínimo de prueba para el DPI escaneado de la entrada en-1 (bandeja de Paola). */
+function archivosDemo(): Almacen["archivos"] {
+  const texto = [
+    "%PDF-1.4",
+    "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj",
+    "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj",
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 180]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj",
+    "4 0 obj<</Length 58>>stream",
+    "BT /F1 16 Tf 40 90 Td (DPI de prueba - Ana Ramirez) Tj ET",
+    "endstream endobj",
+    "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj",
+    "trailer<</Root 1 0 R>>",
+    "%%EOF",
+  ].join("\n");
+  const datos = new TextEncoder().encode(texto);
+  return new Map([
+    [
+      "AR-demo-dpi",
+      {
+        meta: {
+          id: "AR-demo-dpi",
+          nombre: "DPI-Ana-Ramirez.pdf",
+          tipo: "application/pdf",
+          tamano: datos.byteLength,
+        },
+        datos,
+      },
+    ],
+  ]);
 }
