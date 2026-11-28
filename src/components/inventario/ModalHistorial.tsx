@@ -21,6 +21,8 @@ const TONO: Record<TipoEventoHistorial, string> = {
   fiado: "bg-st-recibido-bg text-navy-900",
   compra: "bg-stock-ok-bg text-stock-ok-text",
   reposicion: "bg-stock-ok-bg text-stock-ok-text",
+  devolucion: "bg-stock-ok-bg text-stock-ok-text",
+  cambio: "bg-gray-100 text-ink",
   merma: "bg-stock-out-bg text-stock-out-text",
   consumo_interno: "bg-gold-100 text-gold-text",
   abrir_paquete: "bg-gray-100 text-ink",

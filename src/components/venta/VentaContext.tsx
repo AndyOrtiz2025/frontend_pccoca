@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -45,6 +46,13 @@ interface VentaValue {
   /** Registra la venta en el servidor. Devuelve `true` si se guardó. */
   confirmar: () => Promise<boolean>;
   abrirPaquete: (productoId: string) => Promise<boolean>;
+  /** Actualiza el semáforo de productos que cambiaron de stock (ej. tras una devolución). */
+  actualizarProductos: (cambiados: ProductoVenta[]) => void;
+  /**
+   * Una pantalla puede recibir ella misma lo que lee el escáner (ej. Devoluciones) en lugar de
+   * agregarlo al carrito. `null` lo devuelve al carrito.
+   */
+  usarLector: (alLeer: ((codigo: string) => void) | null) => void;
 }
 
 const VentaContext = createContext<VentaValue | null>(null);
@@ -138,7 +146,18 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
   const manejarError = useErrorApi();
 
   // Lector de código de barras: funciona en cualquier pantalla del Empleado.
-  useLectorCodigoBarras(escanear, !seleccionado && !comprobante);
+  const lectorPropio = useRef<((codigo: string) => void) | null>(null);
+  const leer = useCallback(
+    (codigo: string) => {
+      if (lectorPropio.current) lectorPropio.current(codigo);
+      else escanear(codigo);
+    },
+    [escanear],
+  );
+  const usarLector = useCallback((alLeer: ((codigo: string) => void) | null) => {
+    lectorPropio.current = alLeer;
+  }, []);
+  useLectorCodigoBarras(leer, !seleccionado && !comprobante);
 
   const valor = useMemo<VentaValue>(
     () => ({
@@ -148,6 +167,8 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
       confirmando,
       abrirProducto: setSeleccionado,
       escanear,
+      actualizarProductos,
+      usarLector,
       agregar: (linea) => carritoStore.set(agregarLinea(carritoStore.get(), linea)),
       cambiar: (i, cantidad) => carritoStore.set(cambiarCantidad(carritoStore.get(), i, cantidad)),
       vaciar: () => carritoStore.set([]),
@@ -195,7 +216,17 @@ export function VentaProvider({ usuario, productosIniciales, children }: VentaPr
         }
       },
     }),
-    [productos, lineas, calculado, confirmando, escanear, actualizarProductos, manejarError, toast],
+    [
+      productos,
+      lineas,
+      calculado,
+      confirmando,
+      escanear,
+      actualizarProductos,
+      usarLector,
+      manejarError,
+      toast,
+    ],
   );
 
   return (

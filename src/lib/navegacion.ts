@@ -13,6 +13,7 @@ import {
   Users,
   Wrench,
   type LucideIcon,
+  Undo2,
 } from "lucide-react";
 import type { Rol } from "@/lib/auth/roles";
 
@@ -90,6 +91,7 @@ export const MENU: Record<Rol, GrupoMenu[]> = {
       items: [
         { label: "Pendientes", icon: Clock, href: "/empleado/pendientes", contador: "pendientes" },
         { label: "Carrito", icon: ShoppingBag, href: "/empleado/carrito", contador: "carrito" },
+        { label: "Devoluciones", icon: Undo2, href: "/empleado/devoluciones" },
         { label: "Comentarios", icon: MessageSquare, accion: "comentario" },
       ],
     },
@@ -133,6 +135,7 @@ export const MENU: Record<Rol, GrupoMenu[]> = {
       titulo: "OTROS",
       items: [
         { label: "Pendientes", icon: Clock, href: "/paola/pendientes" },
+        { label: "Devoluciones", icon: Undo2, href: "/paola/devoluciones" },
         { label: "Clientes frecuentes", icon: Contact, href: "/paola/clientes" },
         { label: "Reportes mensuales", icon: BarChart3, href: "/paola/reportes" },
         {

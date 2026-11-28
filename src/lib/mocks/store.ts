@@ -3,6 +3,7 @@ import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
 import type { Cargo, CuentaPendiente, PagoCuenta } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto } from "@/types/producto";
+import type { Devolucion } from "@/types/devolucion";
 import type { Pedido } from "@/types/pedido";
 import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
@@ -37,6 +38,7 @@ interface Almacen {
   compras: Compra[];
   reclamos: Reclamo[];
   pedidos: Pedido[];
+  devoluciones: Devolucion[];
   comprobantes: Comprobante[];
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
@@ -72,6 +74,7 @@ export function almacen(): Almacen {
     compras: structuredClone(COMPRAS_DEMO),
     reclamos: structuredClone(RECLAMOS_DEMO),
     pedidos: structuredClone(PEDIDOS_DEMO),
+    devoluciones: [],
     comprobantes: ventasDemo(),
     movimientos: [],
     conversiones: [],
