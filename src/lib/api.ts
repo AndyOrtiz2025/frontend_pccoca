@@ -17,7 +17,21 @@ import {
 } from "@/lib/reglas/procesos";
 import { resumenVentasDelDia, type ResumenVentas } from "@/lib/reglas/resumen";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
-import { aplicarEdicion, crearDesdeFormulario, siguienteCodigo } from "@/lib/reglas/productos";
+import {
+  aplicarEdicion,
+  crearDesdeFormulario,
+  describirStock,
+  siguienteCodigo,
+} from "@/lib/reglas/productos";
+import {
+  cambiarPrecio,
+  estadoPedido,
+  faltan,
+  pedidoAbierto,
+  siguienteNumeroPedido,
+} from "@/lib/reglas/pedidos";
+import type { NuevoPrecioInput, PedidoInput, RecibirPedidoInput } from "@/schemas/pedido.schema";
+import type { EstadoPedido, LineaPedido, Pedido } from "@/types/pedido";
 import type { MermaInput, ProductoInput } from "@/schemas/producto.schema";
 import type { SubcategoriaInput } from "@/schemas/subcategoria.schema";
 import type { Compra, EstadoReclamo, Proveedor, Reclamo } from "@/types/proveedor";
@@ -322,6 +336,8 @@ export interface DetalleProveedor {
   comprasAnio: number;
   /** Productos que tienen a este proveedor o que se le han comprado. */
   productosQueSurte: number;
+  /** Pedidos que todavía se esperan de este proveedor. */
+  pedidosAbiertos: { id: string; numero: string; fecha: string; porLlegar: number }[];
 }
 
 export async function obtenerDetalleProveedor(
@@ -372,6 +388,15 @@ export async function obtenerDetalleProveedor(
       })),
     comprasAnio: compras.filter((c) => diaDeGuatemala(c.fecha).startsWith(anio)).length,
     productosQueSurte: surte.size,
+    pedidosAbiertos: a.pedidos
+      .filter((p) => p.proveedorId === id && p.admin === rol && pedidoAbierto(p))
+      .sort((x, y) => x.fecha.localeCompare(y.fecha))
+      .map((p) => ({
+        id: p.id,
+        numero: p.numero,
+        fecha: p.fecha,
+        porLlegar: p.lineas.filter((l) => faltan(l) > 0).length,
+      })),
   };
 }
 
@@ -548,6 +573,349 @@ export async function resolverReclamo(
     ...(datos.nota && { nota: datos.nota }),
   };
   return reclamo;
+}
+
+// ─── Pedidos al proveedor ────────────────────────────────────
+
+function adminDe(rol: Rol): "paola" | "oscar" {
+  exigirAdmin(rol);
+  return rol as "paola" | "oscar";
+}
+
+export interface LineaPedidoDetallada extends LineaPedido {
+  codigo?: string;
+  categoria?: Categoria;
+  nombrePaquete?: string;
+  unidadesPorPaquete?: number;
+  /** Cómo está el stock hoy, ej. "0 sueltas · 3 cajas". */
+  stock?: string;
+  /** Último costo que se pagó en esa presentación (para precargar la revisión). */
+  costo?: number;
+  faltan: number;
+}
+
+export interface ResumenPedido {
+  id: string;
+  numero: string;
+  proveedorId: string;
+  proveedor: string;
+  fecha: string;
+  creadoPor: string;
+  estado: EstadoPedido;
+  /** Productos pedidos (sin contar los que se pasaron a otro pedido). */
+  productos: number;
+  /** Productos que todavía se esperan. */
+  porLlegar: number;
+  ultimaRecepcion?: string;
+}
+
+export interface DetallePedido extends Omit<Pedido, "lineas"> {
+  proveedor: Proveedor;
+  estado: EstadoPedido;
+  lineas: LineaPedidoDetallada[];
+}
+
+function detallarLinea(l: LineaPedido): LineaPedidoDetallada {
+  const p = l.productoId ? almacen().productos.find((x) => x.id === l.productoId) : undefined;
+  if (!p) return { ...l, faltan: faltan(l) };
+  return {
+    ...l,
+    nombre: p.nombre,
+    codigo: p.codigo,
+    categoria: p.categoria,
+    nombrePaquete: p.fraccionable?.nombrePaquete,
+    unidadesPorPaquete: p.fraccionable?.unidadesPorPaquete,
+    stock: describirStock(p),
+    costo: l.presentacion === "paquete" ? p.fraccionable?.costoPaquete : p.costo,
+    faltan: faltan(l),
+  };
+}
+
+function pedidoPropio(rol: Rol, id: string): Pedido {
+  const admin = adminDe(rol);
+  const pedido = almacen().pedidos.find((p) => p.id === id);
+  if (!pedido || pedido.admin !== admin) throw new ReglaNegocioError("Ese pedido ya no existe");
+  return pedido;
+}
+
+export async function obtenerPedidos(rol: Rol): Promise<ResumenPedido[]> {
+  const admin = adminDe(rol);
+  const a = almacen();
+  return a.pedidos
+    .filter((p) => p.admin === admin)
+    .map((p) => ({
+      id: p.id,
+      numero: p.numero,
+      proveedorId: p.proveedorId,
+      proveedor: a.proveedores.find((x) => x.id === p.proveedorId)?.nombre ?? "Proveedor",
+      fecha: p.fecha,
+      creadoPor: p.creadoPor,
+      estado: estadoPedido(p),
+      productos: p.lineas.filter((l) => l.estado !== "movida").length,
+      porLlegar: p.lineas.filter((l) => faltan(l) > 0).length,
+      ultimaRecepcion: p.recepciones.at(-1)?.fecha,
+    }))
+    .sort((x, y) => y.fecha.localeCompare(x.fecha));
+}
+
+export async function obtenerPedido(rol: Rol, id: string): Promise<DetallePedido | null> {
+  const admin = adminDe(rol);
+  const a = almacen();
+  const pedido = a.pedidos.find((p) => p.id === id && p.admin === admin);
+  if (!pedido) return null;
+  const proveedor = a.proveedores.find((p) => p.id === pedido.proveedorId);
+  if (!proveedor) return null;
+  return {
+    ...pedido,
+    proveedor,
+    estado: estadoPedido(pedido),
+    lineas: pedido.lineas.map(detallarLinea),
+  };
+}
+
+export interface PendienteAnterior {
+  pedidoId: string;
+  numero: string;
+  fecha: string;
+  linea: LineaPedidoDetallada;
+}
+
+/** Lo que falta de pedidos anteriores a ese proveedor (para pasarlo a un pedido nuevo). */
+export async function obtenerPendientesAnteriores(
+  rol: Rol,
+  proveedorId: string,
+  excepto?: string,
+): Promise<PendienteAnterior[]> {
+  const admin = adminDe(rol);
+  return almacen()
+    .pedidos.filter((p) => p.admin === admin && p.proveedorId === proveedorId && p.id !== excepto)
+    .sort((x, y) => x.fecha.localeCompare(y.fecha))
+    .flatMap((p) =>
+      p.lineas
+        .filter((l) => faltan(l) > 0)
+        .map((l) => ({
+          pedidoId: p.id,
+          numero: p.numero,
+          fecha: p.fecha,
+          linea: detallarLinea(l),
+        })),
+    );
+}
+
+/** Revisa las líneas de un pedido nuevo o editado y las arma (sin guardar nada todavía). */
+function armarLineas(rol: Rol, datos: PedidoInput, excepto?: string) {
+  const a = almacen();
+  const proveedor = proveedorExistente(datos.proveedorId);
+  if (!proveedor.activo) throw new ReglaNegocioError("Ese proveedor está inactivo");
+  const vistos = new Set<string>();
+  const traer: LineaPedido[] = [];
+  const lineas = datos.lineas.map((l): LineaPedido => {
+    let nombre = l.nombre ?? "";
+    if (l.productoId) {
+      const p = a.productos.find((x) => x.id === l.productoId);
+      if (!p) throw new ReglaNegocioError("Uno de los productos ya no existe");
+      exigirCategoria(rol, p.categoria);
+      if (l.presentacion === "paquete" && !p.fraccionable) {
+        throw new ReglaNegocioError(`${p.nombre} no se maneja por caja`);
+      }
+      const clave = `${p.id}|${l.presentacion}`;
+      if (vistos.has(clave)) {
+        throw new ReglaNegocioError(`${p.nombre} está repetido en la lista: suma las cantidades`);
+      }
+      vistos.add(clave);
+      nombre = p.nombre;
+    }
+    if (l.traerDe) {
+      const anterior = a.pedidos.find((p) => p.id === l.traerDe!.pedidoId);
+      const linea = anterior?.lineas.find((x) => x.id === l.traerDe!.lineaId);
+      if (
+        !anterior ||
+        !linea ||
+        anterior.id === excepto ||
+        anterior.admin !== adminDe(rol) ||
+        anterior.proveedorId !== proveedor.id ||
+        faltan(linea) === 0
+      ) {
+        throw new ReglaNegocioError(`Lo pendiente de ${nombre} ya no está disponible`);
+      }
+      traer.push(linea);
+    }
+    return {
+      id: `lp-${crypto.randomUUID()}`,
+      ...(l.productoId && { productoId: l.productoId }),
+      nombre,
+      presentacion: l.presentacion,
+      cantidad: l.cantidad,
+      recibidas: 0,
+      estado: "pendiente",
+    };
+  });
+  return { proveedor, lineas, traer };
+}
+
+/** Nuevo pedido. Lo que se trae de pedidos anteriores queda allá como "pasó al P-000X". */
+export async function crearPedido(
+  rol: Rol,
+  datos: PedidoInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Pedido> {
+  const admin = adminDe(rol);
+  const a = almacen();
+  const { proveedor, lineas, traer } = armarLineas(rol, datos);
+  const pedido: Pedido = {
+    id: `ped-${crypto.randomUUID()}`,
+    numero: siguienteNumeroPedido(a.pedidos),
+    proveedorId: proveedor.id,
+    admin,
+    fecha: ahora.toISOString(),
+    creadoPor: usuario,
+    notas: datos.notas,
+    lineas,
+    recepciones: [],
+  };
+  a.pedidos.push(pedido);
+  for (const l of traer) Object.assign(l, { estado: "movida", movidaA: pedido.numero });
+  return pedido;
+}
+
+/** Editar: solo mientras no ha llegado nada. El proveedor no cambia. */
+export async function editarPedido(rol: Rol, id: string, datos: PedidoInput): Promise<Pedido> {
+  const pedido = pedidoPropio(rol, id);
+  if (pedido.recepciones.length > 0 || estadoPedido(pedido) !== "pendiente") {
+    throw new ReglaNegocioError("Este pedido ya no se puede editar: ya se revisó un paquete");
+  }
+  if (datos.proveedorId !== pedido.proveedorId) {
+    throw new ReglaNegocioError("El proveedor de un pedido no se cambia");
+  }
+  const { lineas, traer } = armarLineas(rol, datos, id);
+  // Lo que ya se pasó a otro pedido o ya no se pide se conserva (es historial).
+  pedido.lineas = [...pedido.lineas.filter((l) => l.estado !== "pendiente"), ...lineas];
+  pedido.notas = datos.notas;
+  for (const l of traer) Object.assign(l, { estado: "movida", movidaA: pedido.numero });
+  return pedido;
+}
+
+export interface ResultadoRecepcion {
+  compra?: { id: string; total: number };
+  avisos: AvisoCosto[];
+  reclamos: number;
+  estado: EstadoPedido;
+}
+
+/**
+ * Revisar paquete: se tacha lo que vino (con buenas, dañadas y costo) y lo que ya no se pide.
+ * Lo que vino se registra como compra (suma al stock, último costo, reclamos por lo dañado).
+ * Lo que no se marcó sigue pendiente para la próxima entrega. Todo o nada.
+ */
+export async function recibirPedido(
+  rol: Rol,
+  id: string,
+  datos: RecibirPedidoInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<ResultadoRecepcion> {
+  const pedido = pedidoPropio(rol, id);
+  if (!pedidoAbierto(pedido)) throw new ReglaNegocioError("Este pedido ya está cerrado");
+  const linea = (lineaId: string) => {
+    const l = pedido.lineas.find((x) => x.id === lineaId);
+    if (!l || l.estado !== "pendiente") {
+      throw new ReglaNegocioError("Uno de los productos ya no está pendiente en este pedido");
+    }
+    return l;
+  };
+  const ids = [...datos.lineas.map((l) => l.lineaId), ...datos.cancelar];
+  if (new Set(ids).size !== ids.length) throw new ReglaNegocioError("Un producto está repetido");
+
+  const llegaron = datos.lineas.map((r) => {
+    const l = linea(r.lineaId);
+    const productoId = l.productoId ?? r.productoId;
+    if (!productoId) {
+      throw new ReglaNegocioError(`Crea el producto "${l.nombre}" antes de recibirlo`);
+    }
+    if (l.productoId && r.productoId && r.productoId !== l.productoId) {
+      throw new ReglaNegocioError(`El producto de "${l.nombre}" no coincide`);
+    }
+    if (l.productoId && r.presentacion !== l.presentacion) {
+      throw new ReglaNegocioError(
+        `${l.nombre} se pidió ${l.presentacion === "paquete" ? "por caja" : "por unidad"}`,
+      );
+    }
+    return { l, r, productoId };
+  });
+  const cancelar = datos.cancelar.map(linea);
+
+  let resultado: ResultadoCompra | undefined;
+  if (llegaron.length > 0) {
+    // registrarCompra revisa todo antes de guardar: si falla, el pedido no cambia.
+    resultado = await registrarCompra(
+      rol,
+      {
+        proveedorId: pedido.proveedorId,
+        fecha: datos.fecha,
+        factura: datos.factura,
+        lineas: llegaron.map(({ r, productoId }) => ({
+          productoId,
+          presentacion: r.presentacion,
+          cantidad: r.buenas,
+          danadas: r.danadas,
+          costoUnitario: r.costoUnitario,
+          motivoDano: r.motivoDano,
+        })),
+      },
+      usuario,
+      ahora,
+    );
+  }
+
+  for (const { l, r, productoId } of llegaron) {
+    if (!l.productoId) {
+      l.productoId = productoId;
+      l.nombre = almacen().productos.find((p) => p.id === productoId)?.nombre ?? l.nombre;
+      l.presentacion = r.presentacion;
+    }
+    l.recibidas += r.buenas + r.danadas;
+    if (l.recibidas >= l.cantidad || r.noEsperarResto) l.estado = "completa";
+  }
+  for (const l of cancelar) l.estado = "cancelada";
+  if (resultado) {
+    pedido.recepciones.push({
+      fecha: resultado.compra.fecha,
+      por: usuario,
+      compraId: resultado.compra.id,
+      total: resultado.compra.total,
+      factura: resultado.compra.factura,
+    });
+  }
+  return {
+    ...(resultado && { compra: { id: resultado.compra.id, total: resultado.compra.total } }),
+    avisos: resultado?.avisos ?? [],
+    reclamos: resultado?.reclamos ?? 0,
+    estado: estadoPedido(pedido),
+  };
+}
+
+/** Ya no esperar nada más: lo pendiente queda como "ya no se pide". */
+export async function cerrarPedido(rol: Rol, id: string): Promise<EstadoPedido> {
+  const pedido = pedidoPropio(rol, id);
+  if (!pedidoAbierto(pedido)) throw new ReglaNegocioError("Este pedido ya está cerrado");
+  for (const l of pedido.lineas) if (l.estado === "pendiente") l.estado = "cancelada";
+  return estadoPedido(pedido);
+}
+
+/** Nuevo precio desde el aviso de "cambió el costo" (sin abrir Editar producto). */
+export async function cambiarPrecioProducto(
+  rol: Rol,
+  id: string,
+  datos: NuevoPrecioInput,
+): Promise<Producto> {
+  const producto = productoAdministrado(rol, id);
+  try {
+    Object.assign(producto, cambiarPrecio(producto, datos.presentacion, centavos(datos.precio)));
+  } catch (e) {
+    throw new ReglaNegocioError((e as Error).message);
+  }
+  return producto;
 }
 
 /** Historial de un producto (kardex): ventas, fiados, compras, mermas, consumo, cajas abiertas. */

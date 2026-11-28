@@ -9,6 +9,7 @@ import {
   Ban,
   ChevronDown,
   CircleCheck,
+  ClipboardList,
   HandCoins,
   Mail,
   MapPin,
@@ -22,7 +23,16 @@ import {
   Truck,
   XCircle,
 } from "lucide-react";
-import { Button, Card, Chip, Confirmar, Input, KpiCard, useToast } from "@/components/ui";
+import {
+  Button,
+  buttonClasses,
+  Card,
+  Chip,
+  Confirmar,
+  Input,
+  KpiCard,
+  useToast,
+} from "@/components/ui";
 import { useErrorApi } from "@/hooks/useErrorApi";
 import { cn } from "@/lib/cn";
 import { formatFecha, formatFechaHora } from "@/lib/fechas";
@@ -49,11 +59,14 @@ export function DetalleProveedorVista({
   productos,
   base,
   categorias,
+  basePedidos,
 }: {
   detalle: DetalleProveedor;
   productos: Producto[];
   base: string;
   categorias: Categoria[];
+  /** Dónde están los pedidos (ej. "/paola/pedidos"). Sin esto no se muestran. */
+  basePedidos?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -126,6 +139,14 @@ export function DetalleProveedorVista({
               <Button variant="secondary" onClick={() => cambiarActivo(true)}>
                 <RotateCcw /> Reactivar
               </Button>
+            )}
+            {basePedidos && p.activo && (
+              <Link
+                href={`${basePedidos}/nuevo?proveedor=${encodeURIComponent(p.id)}`}
+                className={buttonClasses("secondary")}
+              >
+                <ClipboardList /> Hacer pedido
+              </Link>
             )}
             <Button onClick={() => setComprando(true)} disabled={!p.activo}>
               <ShoppingCart /> Registrar compra
@@ -202,6 +223,33 @@ export function DetalleProveedorVista({
           icon={<AlertTriangle />}
         />
       </div>
+
+      {basePedidos && detalle.pedidosAbiertos.length > 0 && (
+        <Card>
+          <div className="px-5 pt-4 pb-2">
+            <h3 className="flex items-center gap-2 text-body font-semibold text-ink-strong">
+              <ClipboardList className="size-4 text-gold-600" /> Pedidos por llegar
+            </h3>
+          </div>
+          <ul className="divide-y divide-gray-200 border-t border-gray-200">
+            {detalle.pedidosAbiertos.map((x) => (
+              <li key={x.id}>
+                <Link
+                  href={`${basePedidos}/${x.id}`}
+                  className="hover:bg-gray-50 flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3"
+                >
+                  <span className="font-mono font-semibold text-ink-strong">{x.numero}</span>
+                  <span className="text-small text-ink-muted">Hecho el {formatFecha(x.fecha)}</span>
+                  <span className="ml-auto text-small font-semibold text-stock-low-text">
+                    {x.porLlegar}{" "}
+                    {x.porLlegar === 1 ? "producto por llegar" : "productos por llegar"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {pendientes.length > 0 && (
         <Card className="border-stock-low/40">

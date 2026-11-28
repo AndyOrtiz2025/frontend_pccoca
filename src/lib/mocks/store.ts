@@ -3,12 +3,13 @@ import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
 import type { Cargo, CuentaPendiente, PagoCuenta } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto } from "@/types/producto";
+import type { Pedido } from "@/types/pedido";
 import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
-import { COMPRAS_DEMO, PROVEEDORES_DEMO, RECLAMOS_DEMO } from "./proveedores";
+import { COMPRAS_DEMO, PEDIDOS_DEMO, PROVEEDORES_DEMO, RECLAMOS_DEMO } from "./proveedores";
 import { ventasDemo } from "./ventas";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
@@ -35,6 +36,7 @@ interface Almacen {
   proveedores: Proveedor[];
   compras: Compra[];
   reclamos: Reclamo[];
+  pedidos: Pedido[];
   comprobantes: Comprobante[];
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
@@ -69,6 +71,7 @@ export function almacen(): Almacen {
     proveedores: structuredClone(PROVEEDORES_DEMO),
     compras: structuredClone(COMPRAS_DEMO),
     reclamos: structuredClone(RECLAMOS_DEMO),
+    pedidos: structuredClone(PEDIDOS_DEMO),
     comprobantes: ventasDemo(),
     movimientos: [],
     conversiones: [],
