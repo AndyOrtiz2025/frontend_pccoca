@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import type { ZodSafeParseResult } from "zod";
 import { ReglaNegocioError, SinPermisoError } from "@/lib/api";
 import type { Rol } from "./roles";
 import { obtenerSesion } from "./server";
@@ -29,4 +30,21 @@ export function respuestaDeError(e: unknown): NextResponse {
   if (e instanceof SinPermisoError) return NextResponse.json({ error: e.message }, { status: 403 });
   console.error(e);
   return NextResponse.json({ error: "Ocurrió un error. Intenta de nuevo." }, { status: 500 });
+}
+
+/**
+ * Lee el cuerpo JSON y lo valida con el esquema. Devuelve los datos o una respuesta 400
+ * con el primer error (y el campo) lista para retornar.
+ */
+export async function leerJson<T>(
+  request: Request,
+  esquema: { safeParse: (v: unknown) => ZodSafeParseResult<T> },
+): Promise<T | NextResponse> {
+  const r = esquema.safeParse(await request.json().catch(() => null));
+  if (r.success) return r.data;
+  const i = r.error.issues[0];
+  return NextResponse.json(
+    { error: i?.message ?? "Datos inválidos", campo: i?.path.join(".") },
+    { status: 400 },
+  );
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
+import type { ClienteFrecuente } from "@/types/cliente";
 import type { Cargo, CuentaPendiente, PagoCuenta } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto } from "@/types/producto";
@@ -8,6 +9,7 @@ import type { Pedido } from "@/types/pedido";
 import type { CambioPrecioTramite, ModuloTramite, Tramite } from "@/types/tramite";
 import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
+import { CLIENTES_DEMO } from "./clientes";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
@@ -52,6 +54,8 @@ interface Almacen {
   cuentas: CuentaPendiente[];
   cargos: Cargo[];
   pagos: PagoCuenta[];
+  /** Clientes frecuentes de trámites (solo Paola). */
+  clientes: ClienteFrecuente[];
   /** Contenido de los archivos subidos, por id. */
   archivos: Map<string, { meta: ArchivoAdjunto; datos: Uint8Array }>;
   /**
@@ -91,6 +95,7 @@ export function almacen(): Almacen {
     cuentas: structuredClone(CUENTAS_DEMO),
     cargos: structuredClone(CARGOS_DEMO),
     pagos: structuredClone(PAGOS_DEMO),
+    clientes: structuredClone(CLIENTES_DEMO),
     archivos: archivosDemo(),
     historialVaciado: {},
     imagenes: new Map(),
