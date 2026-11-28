@@ -137,6 +137,7 @@ export function generarComprobante(
   const lineas: LineaComprobante[] = calculado.lineas
     .filter((l) => l.tipo === "venta")
     .map((l) => ({
+      productoId: l.productoId,
       codigo: l.producto.codigo,
       nombre: l.producto.nombre,
       presentacion: l.presentacion,

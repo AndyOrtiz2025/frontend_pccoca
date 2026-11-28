@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diaDeGuatemala, formatFecha, haceCuanto, saludo } from "./fechas";
+import { diaDeGuatemala, diaSemanaGuatemala, formatFecha, haceCuanto, saludo } from "./fechas";
 
 describe("fechas", () => {
   it("formatea fechas sin cambiar de día por la zona horaria", () => {
@@ -30,5 +30,12 @@ describe("día y saludo en hora de Guatemala (UTC−6)", () => {
     expect(saludo(new Date("2026-11-28T00:59:00Z"))).toBe("Buenas tardes"); // 6:59 p. m.
     expect(saludo(new Date("2026-11-28T01:00:00Z"))).toBe("Buenas noches"); // 7:00 p. m.
     expect(saludo(new Date("2026-11-27T10:59:00Z"))).toBe("Buenas noches"); // 4:59 a. m.
+  });
+});
+
+describe("día de la semana en Guatemala", () => {
+  it("el viernes 27 a las 11 p. m. sigue siendo viernes aunque en UTC ya sea sábado", () => {
+    expect(diaSemanaGuatemala(new Date("2026-11-28T05:00:00Z"))).toBe(5);
+    expect(diaSemanaGuatemala(new Date("2026-11-28T06:00:00Z"))).toBe(6);
   });
 });

@@ -18,10 +18,19 @@ import {
 import { resumenVentasDelDia, type ResumenVentas } from "@/lib/reglas/resumen";
 import { abrirPaquete, aVistaEmpleado, descontarStock } from "@/lib/reglas/inventario";
 import { aplicarEdicion, crearDesdeFormulario, siguienteCodigo } from "@/lib/reglas/productos";
-import { PROVEEDORES_DEMO } from "@/lib/mocks/proveedores";
 import type { MermaInput, ProductoInput } from "@/schemas/producto.schema";
 import type { SubcategoriaInput } from "@/schemas/subcategoria.schema";
-import type { Proveedor } from "@/types/proveedor";
+import type { Compra, EstadoReclamo, Proveedor, Reclamo } from "@/types/proveedor";
+import type { CompraInput, ProveedorInput, ResolverReclamoInput } from "@/schemas/proveedor.schema";
+import {
+  aplicarCompra,
+  construirHistorial,
+  sumarAlStock,
+  type AvisoCosto,
+  type EventoHistorial,
+} from "@/lib/reglas/compras";
+import { numeroComprobante } from "@/lib/comprobante";
+import { diaDeGuatemala } from "@/lib/fechas";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
 import type { CargoInput, CuentaInput } from "@/schemas/pendiente.schema";
@@ -91,7 +100,7 @@ export async function obtenerProductosAdmin(rol: Rol, categoria: Categoria): Pro
 export const MAX_BYTES_FOTO = 2 * 1024 * 1024;
 
 export async function obtenerProveedores(): Promise<Proveedor[]> {
-  return PROVEEDORES_DEMO;
+  return almacen().proveedores.filter((p) => p.activo);
 }
 
 /** Código sugerido para un producto nuevo de esa categoría. */
@@ -160,7 +169,7 @@ export async function crearProducto(
 ): Promise<Producto> {
   exigirCategoria(rol, datos.categoria);
   validarCodigosUnicos(datos);
-  if (datos.proveedorId && !PROVEEDORES_DEMO.some((p) => p.id === datos.proveedorId)) {
+  if (datos.proveedorId && !almacen().proveedores.some((p) => p.id === datos.proveedorId)) {
     throw new ReglaNegocioError("Ese proveedor no existe");
   }
   const producto = crearDesdeFormulario(`p-${crypto.randomUUID()}`, datos);
@@ -184,7 +193,7 @@ export async function editarProducto(
     throw new ReglaNegocioError("La categoría de un producto no se cambia");
   }
   validarCodigosUnicos(datos, id);
-  if (datos.proveedorId && !PROVEEDORES_DEMO.some((p) => p.id === datos.proveedorId)) {
+  if (datos.proveedorId && !almacen().proveedores.some((p) => p.id === datos.proveedorId)) {
     throw new ReglaNegocioError("Ese proveedor no existe");
   }
   let editado: Producto;
@@ -242,6 +251,369 @@ export async function registrarMermaAdmin(
     registradoPor: usuario,
   });
   return producto;
+}
+
+// ─── Proveedores, compras y reclamos (Paola: Librería y Varios, Oscar: Tecnología) ───
+
+/** Paola y Oscar administran proveedores; el Empleado no. */
+function exigirAdmin(rol: Rol) {
+  if (rol !== "paola" && rol !== "oscar") throw new SinPermisoError();
+}
+
+function proveedorExistente(id: string): Proveedor {
+  const p = almacen().proveedores.find((x) => x.id === id);
+  if (!p) throw new ReglaNegocioError("Ese proveedor ya no existe");
+  return p;
+}
+
+/** "2026-11" del mes en curso, en hora de Guatemala. */
+const mesDe = (fecha: string | Date) => diaDeGuatemala(fecha).slice(0, 7);
+
+export interface ResumenProveedor extends Proveedor {
+  ultimaCompra?: string;
+  /** Total comprado en el mes en curso y cuántas compras. */
+  totalMes: number;
+  comprasMes: number;
+  reclamosPendientes: number;
+}
+
+export async function obtenerProveedoresAdmin(
+  rol: Rol,
+  ahora = new Date(),
+): Promise<ResumenProveedor[]> {
+  exigirAdmin(rol);
+  const a = almacen();
+  const mes = mesDe(ahora);
+  return a.proveedores
+    .map((p) => {
+      const compras = a.compras.filter((c) => c.proveedorId === p.id);
+      const delMes = compras.filter((c) => mesDe(c.fecha) === mes);
+      return {
+        ...p,
+        ultimaCompra: compras
+          .map((c) => c.fecha)
+          .sort()
+          .at(-1),
+        totalMes: centavos(delMes.reduce((t, c) => t + c.total, 0)),
+        comprasMes: delMes.length,
+        reclamosPendientes: a.reclamos.filter(
+          (r) => r.proveedorId === p.id && r.estado === "pendiente",
+        ).length,
+      };
+    })
+    .sort((x, y) => x.nombre.localeCompare(y.nombre, "es"));
+}
+
+export interface CompraDetallada extends Compra {
+  lineas: (Compra["lineas"][number] & { nombre: string; codigo: string; nombrePaquete?: string })[];
+}
+
+export interface ReclamoDetallado extends Reclamo {
+  nombre: string;
+  nombrePaquete?: string;
+  factura?: string;
+}
+
+export interface DetalleProveedor {
+  proveedor: ResumenProveedor;
+  compras: CompraDetallada[];
+  reclamos: ReclamoDetallado[];
+  /** Compras registradas en el año en curso. */
+  comprasAnio: number;
+  /** Productos que tienen a este proveedor o que se le han comprado. */
+  productosQueSurte: number;
+}
+
+export async function obtenerDetalleProveedor(
+  rol: Rol,
+  id: string,
+  ahora = new Date(),
+): Promise<DetalleProveedor | null> {
+  exigirAdmin(rol);
+  const a = almacen();
+  const proveedor = (await obtenerProveedoresAdmin(rol, ahora)).find((p) => p.id === id);
+  if (!proveedor) return null;
+  const producto = (pid: string) => a.productos.find((p) => p.id === pid);
+  const compras = a.compras
+    .filter((c) => c.proveedorId === id)
+    .sort((x, y) => y.fecha.localeCompare(x.fecha))
+    .map((c) => ({
+      ...c,
+      lineas: c.lineas.map((l) => {
+        const p = producto(l.productoId);
+        return {
+          ...l,
+          nombre: p?.nombre ?? "Producto eliminado",
+          codigo: p?.codigo ?? "",
+          nombrePaquete: p?.fraccionable?.nombrePaquete,
+        };
+      }),
+    }));
+  const surte = new Set([
+    ...a.productos.filter((p) => p.proveedorId === id).map((p) => p.id),
+    ...compras.flatMap((c) => c.lineas.map((l) => l.productoId)),
+  ]);
+  const anio = diaDeGuatemala(ahora).slice(0, 4);
+  return {
+    proveedor,
+    compras,
+    reclamos: a.reclamos
+      .filter((r) => r.proveedorId === id)
+      .sort(
+        (x, y) =>
+          Number(x.estado !== "pendiente") - Number(y.estado !== "pendiente") ||
+          y.fecha.localeCompare(x.fecha),
+      )
+      .map((r) => ({
+        ...r,
+        nombre: producto(r.productoId)?.nombre ?? "Producto eliminado",
+        nombrePaquete: producto(r.productoId)?.fraccionable?.nombrePaquete,
+        factura: a.compras.find((c) => c.id === r.compraId)?.factura,
+      })),
+    comprasAnio: compras.filter((c) => diaDeGuatemala(c.fecha).startsWith(anio)).length,
+    productosQueSurte: surte.size,
+  };
+}
+
+export async function crearProveedor(rol: Rol, datos: ProveedorInput): Promise<Proveedor> {
+  exigirAdmin(rol);
+  const repetido = almacen().proveedores.find(
+    (p) => normalizar(p.nombre) === normalizar(datos.nombre),
+  );
+  if (repetido) throw new ReglaNegocioError(`Ya existe "${repetido.nombre}"`);
+  const proveedor: Proveedor = { id: `prov-${crypto.randomUUID()}`, ...datos, activo: true };
+  almacen().proveedores.push(proveedor);
+  return proveedor;
+}
+
+export async function editarProveedor(
+  rol: Rol,
+  id: string,
+  datos: ProveedorInput,
+): Promise<Proveedor> {
+  exigirAdmin(rol);
+  const proveedor = proveedorExistente(id);
+  const repetido = almacen().proveedores.find(
+    (p) => p.id !== id && normalizar(p.nombre) === normalizar(datos.nombre),
+  );
+  if (repetido) throw new ReglaNegocioError(`Ya existe "${repetido.nombre}"`);
+  // Los campos opcionales que se dejan vacíos se borran.
+  Object.assign(proveedor, {
+    nombre: datos.nombre,
+    surte: datos.surte,
+    nit: datos.nit,
+    contacto: datos.contacto,
+    telefono: datos.telefono,
+    correo: datos.correo,
+    direccion: datos.direccion,
+    diasVisita: datos.diasVisita,
+    notas: datos.notas,
+  });
+  return proveedor;
+}
+
+/** Inactivar (deja de salir al registrar compras y en el producto) o reactivar. Nunca se borra. */
+export async function cambiarActivoProveedor(rol: Rol, id: string, activo: boolean) {
+  exigirAdmin(rol);
+  proveedorExistente(id).activo = activo;
+}
+
+export interface ResultadoCompra {
+  compra: Compra;
+  /** Productos cuyo costo cambió, con la ganancia que queda con el precio actual. */
+  avisos: AvisoCosto[];
+  reclamos: number;
+}
+
+/**
+ * Registrar compra (pantalla 19), todo o nada:
+ * - Suma al stock lo que llegó bueno; el costo pasa a ser el de esta compra (último costo).
+ * - Lo dañado no entra al stock: queda como reclamo pendiente con el proveedor.
+ * Paola solo compra productos de Librería y Varios; Oscar, de Tecnología.
+ */
+export async function registrarCompra(
+  rol: Rol,
+  datos: CompraInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<ResultadoCompra> {
+  exigirAdmin(rol);
+  const a = almacen();
+  const proveedor = proveedorExistente(datos.proveedorId);
+  if (!proveedor.activo) throw new ReglaNegocioError("Ese proveedor está inactivo");
+  if (diaDeGuatemala(`${datos.fecha}T12:00:00-06:00`) > diaDeGuatemala(ahora)) {
+    throw new ReglaNegocioError("La fecha de recepción no puede ser futura");
+  }
+  const ids = datos.lineas.map((l) => `${l.productoId}|${l.presentacion}`);
+  if (new Set(ids).size !== ids.length) {
+    throw new ReglaNegocioError("Un producto está repetido en la lista: suma las cantidades");
+  }
+
+  // Primero se calcula todo sobre copias; si algo falla, no se guarda nada.
+  // Si un producto llega por caja y por unidad, las dos líneas se aplican una tras otra.
+  const copias = new Map<string, { original: Producto; nuevo: Producto }>();
+  const avisos: AvisoCosto[] = [];
+  for (const l of datos.lineas) {
+    const original = a.productos.find((p) => p.id === l.productoId);
+    if (!original) throw new ReglaNegocioError("Uno de los productos ya no existe");
+    exigirCategoria(rol, original.categoria);
+    if (l.presentacion === "paquete" && !original.fraccionable) {
+      throw new ReglaNegocioError(`${original.nombre} no se maneja por caja`);
+    }
+    const base = copias.get(original.id)?.nuevo ?? original;
+    const r = aplicarCompra(base, l);
+    copias.set(original.id, { original, nuevo: r.producto });
+    if (r.aviso) avisos.push(r.aviso);
+  }
+
+  // Hora: si es de hoy, la hora actual; si es de otro día, mediodía de ese día.
+  const hoy = diaDeGuatemala(ahora) === datos.fecha;
+  const fecha = hoy ? ahora.toISOString() : new Date(`${datos.fecha}T12:00:00-06:00`).toISOString();
+  const lineas = datos.lineas.map((l) => ({
+    productoId: l.productoId,
+    presentacion: l.presentacion,
+    cantidad: l.cantidad,
+    danadas: l.danadas,
+    costoUnitario: centavos(l.costoUnitario),
+    subtotal: centavos((l.cantidad + l.danadas) * l.costoUnitario),
+  }));
+  const compra: Compra = {
+    id: `C-${crypto.randomUUID()}`,
+    proveedorId: proveedor.id,
+    fecha,
+    factura: datos.factura,
+    lineas,
+    total: centavos(lineas.reduce((t, l) => t + l.subtotal, 0)),
+    registradoPor: usuario,
+  };
+
+  for (const { original, nuevo } of copias.values()) {
+    Object.assign(original, nuevo);
+    // Si el producto no tenía proveedor, queda con este.
+    original.proveedorId ??= proveedor.id;
+  }
+  a.compras.push(compra);
+  let reclamos = 0;
+  for (const l of datos.lineas.filter((x) => x.danadas > 0)) {
+    a.reclamos.push({
+      id: `R-${crypto.randomUUID()}`,
+      proveedorId: proveedor.id,
+      compraId: compra.id,
+      productoId: l.productoId,
+      presentacion: l.presentacion,
+      cantidad: l.danadas,
+      costoUnitario: centavos(l.costoUnitario),
+      motivo: l.motivoDano,
+      fecha,
+      estado: "pendiente",
+    });
+    reclamos++;
+  }
+  return { compra, avisos, reclamos };
+}
+
+/**
+ * Resolver un reclamo: nos repusieron (entra al stock), nos devolvieron el dinero
+ * o se perdió (no entra al stock; cuenta como pérdida en los reportes).
+ */
+export async function resolverReclamo(
+  rol: Rol,
+  id: string,
+  datos: ResolverReclamoInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Reclamo> {
+  exigirAdmin(rol);
+  const a = almacen();
+  const reclamo = a.reclamos.find((r) => r.id === id);
+  if (!reclamo) throw new ReglaNegocioError("Ese reclamo ya no existe");
+  if (reclamo.estado !== "pendiente") throw new ReglaNegocioError("Ese reclamo ya se resolvió");
+  const producto = a.productos.find((p) => p.id === reclamo.productoId);
+  if (!producto) throw new ReglaNegocioError("El producto ya no existe");
+  exigirCategoria(rol, producto.categoria);
+  if (datos.estado === "repuesto") {
+    producto.stock = sumarAlStock(producto.stock, reclamo.presentacion, reclamo.cantidad);
+  }
+  const maximo = centavos(reclamo.cantidad * reclamo.costoUnitario);
+  if (datos.estado === "reembolsado" && datos.monto !== undefined && datos.monto > maximo) {
+    throw new ReglaNegocioError(
+      `El reembolso no puede ser mayor a lo que costó (Q ${maximo.toFixed(2)})`,
+    );
+  }
+  reclamo.estado = datos.estado as EstadoReclamo;
+  reclamo.resolucion = {
+    fecha: ahora.toISOString(),
+    por: usuario,
+    ...(datos.estado === "reembolsado" && { monto: centavos(datos.monto ?? maximo) }),
+    ...(datos.nota && { nota: datos.nota }),
+  };
+  return reclamo;
+}
+
+/** Historial de un producto (kardex): ventas, fiados, compras, mermas, consumo, cajas abiertas. */
+export async function obtenerHistorialProducto(
+  rol: Rol,
+  productoId: string,
+): Promise<EventoHistorial[]> {
+  const producto = productoAdministrado(rol, productoId);
+  const a = almacen();
+  const nombreProveedor = (id: string) =>
+    a.proveedores.find((p) => p.id === id)?.nombre ?? "Proveedor";
+  return construirHistorial(producto, {
+    ventas: a.comprobantes.flatMap((c) =>
+      c.lineas
+        .filter((l) => (l.productoId ? l.productoId === producto.id : l.codigo === producto.codigo))
+        .map((l) => ({
+          fecha: c.fecha,
+          presentacion: l.presentacion,
+          cantidad: l.cantidad,
+          comprobante: numeroComprobante(c),
+          por: c.atendio,
+        })),
+    ),
+    fiados: a.cargos
+      .filter((c) => c.productoId === producto.id)
+      .map((c) => ({
+        fecha: c.fecha,
+        cantidad: c.cantidad,
+        cuenta: a.cuentas.find((x) => x.id === c.cuentaId)?.nombre ?? "cliente",
+        por: c.registradoPor,
+      })),
+    compras: a.compras.flatMap((c) =>
+      c.lineas
+        .filter((l) => l.productoId === producto.id && l.cantidad > 0)
+        .map((l) => ({
+          fecha: c.fecha,
+          presentacion: l.presentacion,
+          cantidad: l.cantidad,
+          proveedor: nombreProveedor(c.proveedorId),
+          factura: c.factura,
+          por: c.registradoPor,
+        })),
+    ),
+    movimientos: a.movimientos
+      .filter((m) => m.productoId === producto.id)
+      .map((m) => ({
+        fecha: m.fecha,
+        tipo: m.tipo,
+        presentacion: m.presentacion,
+        cantidad: m.cantidad,
+        motivo: m.motivo,
+        por: m.registradoPor,
+      })),
+    aperturas: a.conversiones
+      .filter((c) => c.productoId === producto.id)
+      .map((c) => ({ fecha: c.fecha, por: c.registradoPor })),
+    reposiciones: a.reclamos
+      .filter((r) => r.productoId === producto.id && r.estado === "repuesto" && r.resolucion)
+      .map((r) => ({
+        fecha: r.resolucion!.fecha,
+        presentacion: r.presentacion,
+        cantidad: r.cantidad,
+        proveedor: nombreProveedor(r.proveedorId),
+        por: r.resolucion!.por,
+      })),
+  });
 }
 
 // ─── Subcategorías (Útiles escolares, Escritura, Folders…) ───
