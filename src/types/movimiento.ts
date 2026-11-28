@@ -26,6 +26,8 @@ export interface LineaCarrito {
 
 /** Línea del comprobante de venta interno (sección 11.3). */
 export interface LineaComprobante {
+  /** Para el historial del producto (aunque después le cambien el código). */
+  productoId?: string;
   codigo: string;
   nombre: string;
   presentacion: Presentacion;

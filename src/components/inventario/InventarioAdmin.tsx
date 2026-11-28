@@ -9,7 +9,9 @@ import {
   PackageMinus,
   Printer,
   ScanBarcode,
+  History,
   Pencil,
+  ShoppingCart,
   Plus,
   Power,
   Tags,
@@ -55,6 +57,8 @@ import { ModalCodigoBarras } from "@/components/codigos/ModalCodigoBarras";
 import { ModalEtiquetas } from "@/components/codigos/ModalEtiquetas";
 import { useLectorCodigoBarras } from "@/hooks/useLectorCodigoBarras";
 import { buscarPorEscaneo } from "@/lib/reglas/busqueda";
+import { ModalCompra } from "@/components/proveedores/ModalCompra";
+import { ModalHistorial } from "./ModalHistorial";
 import { ModalProducto } from "./ModalProducto";
 import { ModalSubcategorias } from "./ModalSubcategorias";
 
@@ -90,6 +94,8 @@ export function InventarioAdmin({
   const [mermando, setMermando] = useState<Producto | null>(null);
   const [aDesactivar, setADesactivar] = useState<Producto | null>(null);
   const [viendoCodigo, setViendoCodigo] = useState<Producto | null>(null);
+  const [viendoHistorial, setViendoHistorial] = useState<Producto | null>(null);
+  const [comprando, setComprando] = useState(false);
   const [etiquetas, setEtiquetas] = useState<Producto[] | null>(null);
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [resaltado, setResaltado] = useState<string | null>(null);
@@ -209,6 +215,9 @@ export function InventarioAdmin({
           </Button>
           <Button variant="outline" onClick={exportar}>
             <Download /> Exportar inventario
+          </Button>
+          <Button variant="outline" onClick={() => setComprando(true)}>
+            <ShoppingCart /> Registrar compra
           </Button>
           <Button onClick={() => setEditando("nuevo")}>
             <Plus /> Nuevo producto
@@ -332,7 +341,7 @@ export function InventarioAdmin({
                 <Th numeric>Costo</Th>
                 <Th numeric>Margen</Th>
                 <Th>Stock exacto</Th>
-                <Th className="w-36">
+                <Th className="w-44">
                   <span className="sr-only">Acciones</span>
                 </Th>
               </tr>
@@ -346,6 +355,7 @@ export function InventarioAdmin({
                   resaltado={resaltado === p.id}
                   onSeleccionar={() => alternar(p.id)}
                   onCodigo={() => setViendoCodigo(p)}
+                  onHistorial={() => setViendoHistorial(p)}
                   onEditar={() => setEditando(p)}
                   onMerma={() => setMermando(p)}
                   onActivo={() => (p.activo ? setADesactivar(p) : cambiarActivo(p, true))}
@@ -408,6 +418,16 @@ export function InventarioAdmin({
           }}
         />
       )}
+      {viendoHistorial && (
+        <ModalHistorial producto={viendoHistorial} onClose={() => setViendoHistorial(null)} />
+      )}
+      {comprando && (
+        <ModalCompra
+          proveedores={proveedores}
+          productos={productos}
+          onClose={() => setComprando(false)}
+        />
+      )}
       {etiquetas && <ModalEtiquetas productos={etiquetas} onClose={() => setEtiquetas(null)} />}
       {mermando && <ModalMerma producto={mermando} onClose={() => setMermando(null)} />}
       {aDesactivar && (
@@ -437,6 +457,7 @@ function FilaProducto({
   resaltado,
   onSeleccionar,
   onCodigo,
+  onHistorial,
   onEditar,
   onMerma,
   onActivo,
@@ -446,6 +467,7 @@ function FilaProducto({
   resaltado: boolean;
   onSeleccionar: () => void;
   onCodigo: () => void;
+  onHistorial: () => void;
   onEditar: () => void;
   onMerma: () => void;
   onActivo: () => void;
@@ -560,6 +582,15 @@ function FilaProducto({
             aria-label={`Código de barras de ${p.nombre}`}
           >
             <ScanBarcode />
+          </button>
+          <button
+            type="button"
+            className={accion}
+            onClick={onHistorial}
+            title="Historial"
+            aria-label={`Historial de ${p.nombre}`}
+          >
+            <History />
           </button>
           <button
             type="button"

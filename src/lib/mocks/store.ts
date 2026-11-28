@@ -3,10 +3,12 @@ import type { ArchivoAdjunto, Entrada } from "@/types/entrada";
 import type { Cargo, CuentaPendiente, PagoCuenta } from "@/types/pendiente";
 import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto } from "@/types/producto";
+import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
+import { COMPRAS_DEMO, PROVEEDORES_DEMO, RECLAMOS_DEMO } from "./proveedores";
 import { ventasDemo } from "./ventas";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
@@ -30,6 +32,9 @@ export interface ConversionRegistrada {
 
 interface Almacen {
   productos: Producto[];
+  proveedores: Proveedor[];
+  compras: Compra[];
+  reclamos: Reclamo[];
   comprobantes: Comprobante[];
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
@@ -61,6 +66,9 @@ const g = globalThis as unknown as { __pccocaAlmacen?: Almacen };
 export function almacen(): Almacen {
   g.__pccocaAlmacen ??= {
     productos: structuredClone(PRODUCTOS_DEMO),
+    proveedores: structuredClone(PROVEEDORES_DEMO),
+    compras: structuredClone(COMPRAS_DEMO),
+    reclamos: structuredClone(RECLAMOS_DEMO),
     comprobantes: ventasDemo(),
     movimientos: [],
     conversiones: [],

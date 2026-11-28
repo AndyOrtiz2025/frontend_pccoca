@@ -46,6 +46,14 @@ export function diaDeGuatemala(fecha: string | Date): string {
   return diaClave.format(new Date(fecha));
 }
 
+const diaSemana = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: ZONA });
+const DIAS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Día de la semana en Guatemala (0 = domingo … 6 = sábado). */
+export function diaSemanaGuatemala(fecha: Date = new Date()): number {
+  return DIAS_EN.indexOf(diaSemana.format(fecha));
+}
+
 /** Buenos días (5:00–11:59), buenas tardes (12:00–18:59), buenas noches (19:00–4:59). */
 export function saludo(ahora = new Date()): string {
   const h = Number(horaGt.format(ahora));
