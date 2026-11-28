@@ -31,6 +31,8 @@ export interface Cargo {
   registradoPor: string;
   /** Si se pagó con "Pagar seleccionados": el pago que lo cerró. */
   pagoId?: string;
+  /** Última corrección: quién y cuándo (solo interno, no sale en comprobantes). */
+  editado?: { por: string; fecha: string };
 }
 
 /**

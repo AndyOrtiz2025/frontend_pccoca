@@ -78,4 +78,65 @@ test.describe("Pendientes (fiados) del empleado", () => {
     const conSaldo = await pedir(page, "DELETE", "/api/cuentas/cu-1");
     expect(conSaldo.status()).toBe(409);
   });
+
+  test("corregir un cargo: queda quién lo editó y el comprobante no dice quién atendió", async ({
+    page,
+    browser,
+  }) => {
+    await page.goto("/empleado/pendientes/cu-6");
+
+    // Algo libre mal escrito: se corrige la descripción y la cantidad.
+    await page.getByRole("button", { name: "Editar Impresiones blanco y negro" }).click();
+    let d = page.getByRole("dialog", { name: "Editar cargo" });
+    await d.getByLabel("Descripción").fill("Impresiones de hojas de servicios");
+    await d.getByLabel("Cantidad").fill("60");
+    await expect(d.getByText("Q 30.00")).toBeVisible();
+    await d.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(page.getByText("Cargo corregido")).toBeVisible();
+    const fila = page.getByRole("row").filter({ hasText: "Impresiones de hojas de servicios" });
+    await expect(fila).toContainText("Editado por Carlos");
+    await expect(page.getByText("Q 25.00").first()).toBeVisible(); // saldo: 30 + 15 − 20
+
+    // No deja que el total quede por debajo de lo abonado (Q 20).
+    await page.getByRole("button", { name: "Editar Impresiones de hojas de servicios" }).click();
+    d = page.getByRole("dialog", { name: "Editar cargo" });
+    await d.getByLabel("Cantidad").fill("2");
+    await d.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(d.getByText("Ya pagó Q 20.00")).toBeVisible();
+    await d.getByRole("button", { name: "Cancelar" }).click();
+
+    // Producto del inventario: la cantidad ajusta el precio (mayoreo).
+    await page.getByRole("button", { name: "Editar Folder tamaño carta" }).click();
+    d = page.getByRole("dialog", { name: "Editar cargo" });
+    await expect(d.getByText("el stock se ajusta solo")).toBeVisible();
+    await d.getByLabel("Cantidad").fill("5");
+    await expect(d.getByText("Q 10.00")).toBeVisible(); // 5 × Q 2.00 (ya sin mayoreo)
+    await d.getByRole("button", { name: "Guardar cambios" }).click();
+    await expect(page.getByRole("row").filter({ hasText: "Folder tamaño carta" })).toContainText(
+      "Q 10.00",
+    );
+
+    // El comprobante de pago ya no dice quién atendió.
+    await page.getByRole("button", { name: "Comprobante" }).first().click();
+    const comprobante = page.getByRole("dialog", { name: "Comprobante de pago" });
+    await expect(comprobante).toBeVisible();
+    await expect(comprobante.getByText("Atendió")).toHaveCount(0);
+
+    // Paola ve la corrección en su vista de solo lectura, sin botón de editar.
+    const pa = await (
+      await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    ).newPage();
+    await entrar(pa, "paola");
+    await pa.goto("/paola/pendientes/cu-6");
+    await expect(pa.getByText(/Editado por Carlos/).first()).toBeVisible();
+    await expect(pa.getByRole("button", { name: /^Editar / })).toHaveCount(0);
+    const r = await pedir(pa, "PATCH", "/api/cuentas/cu-6/cargos/ca-6", {
+      tipo: "libre",
+      descripcion: "x y",
+      precioUnitario: 1,
+      cantidad: 1,
+    });
+    expect(r.status()).toBe(403);
+    await pa.context().close();
+  });
 });

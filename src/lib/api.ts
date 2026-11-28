@@ -32,6 +32,7 @@ import {
 import type { NuevoPrecioInput, PedidoInput, RecibirPedidoInput } from "@/schemas/pedido.schema";
 import type { EstadoPedido, LineaPedido, Pedido } from "@/types/pedido";
 import type { DevolucionInput } from "@/schemas/devolucion.schema";
+import type { EditarCargoInput } from "@/schemas/pendiente.schema";
 import type { TramiteInput } from "@/schemas/tramite.schema";
 import { idModulo, mismoPrecio, precioDesdeFormulario } from "@/lib/reglas/tramites";
 import type { Devolucion, LineaDevuelta } from "@/types/devolucion";
@@ -2230,6 +2231,87 @@ export async function editarCuenta(id: string, datos: CuentaInput): Promise<Cuen
 /**
  * Agregar lo que se llevó fiado. De producto: precio del servidor (con mayoreo) y descuenta stock.
  */
+/**
+ * Corregir un cargo que todavía no se pagó (cualquier empleado). Si es de un producto y cambia la
+ * cantidad, el stock se ajusta y el precio se recalcula (con mayoreo). Queda guardado quién lo
+ * corrigió. El total no puede quedar por debajo de lo que el cliente ya abonó.
+ */
+export async function editarCargo(
+  cuentaId: string,
+  cargoId: string,
+  datos: EditarCargoInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Cargo> {
+  const cuenta = buscarCuenta(cuentaId);
+  const a = almacen();
+  const cargo = a.cargos.find((c) => c.id === cargoId && c.cuentaId === cuenta.id);
+  if (!cargo) throw new ReglaNegocioError("Ese cargo ya no existe");
+  if (cargo.pagoId) {
+    throw new ReglaNegocioError("Ese cargo ya se pagó: ya no se puede editar");
+  }
+  if ((datos.tipo === "producto") !== Boolean(cargo.productoId)) {
+    throw new ReglaNegocioError("El tipo del cargo no coincide");
+  }
+
+  let cambio: Partial<Cargo> = {};
+  let ajustarStock: (() => void) | undefined;
+  if (datos.tipo === "producto") {
+    const producto = a.productos.find((p) => p.id === cargo.productoId);
+    if (!producto) throw new ReglaNegocioError("Ese producto ya no existe");
+    const diferencia = datos.cantidad - cargo.cantidad;
+    if (diferencia !== 0) {
+      let stock: Producto["stock"];
+      try {
+        stock =
+          diferencia > 0
+            ? descontarStock(producto.stock, "unidad", diferencia)
+            : sumarAlStock(producto.stock, "unidad", -diferencia);
+      } catch (e) {
+        throw new ReglaNegocioError(`${producto.nombre}: ${(e as Error).message}`);
+      }
+      ajustarStock = () => (producto.stock = stock);
+    }
+    cambio = {
+      cantidad: datos.cantidad,
+      precioUnitario:
+        diferencia === 0
+          ? cargo.precioUnitario
+          : calcularPrecio(producto, "unidad", datos.cantidad).unitario,
+    };
+  } else {
+    cambio = {
+      cantidad: datos.cantidad,
+      descripcion: datos.descripcion.trim(),
+      precioUnitario: datos.precioUnitario,
+    };
+  }
+
+  // Lo que ya abonó no se puede quedar "de más".
+  const otros = a.cargos.filter((c) => c.cuentaId === cuenta.id && c.id !== cargo.id);
+  const pagos = a.pagos.filter((p) => p.cuentaId === cuenta.id);
+  const nuevoTotal = centavos(
+    otros.reduce((s, c) => s + totalCargo(c), 0) +
+      totalCargo({ cantidad: cambio.cantidad!, precioUnitario: cambio.precioUnitario! }),
+  );
+  const pagado = centavos(pagos.reduce((s, p) => s + p.monto, 0));
+  if (nuevoTotal < pagado) {
+    throw new ReglaNegocioError(
+      `Ya pagó ${formatQ(pagado)}: el total de la cuenta no puede quedar en menos de eso`,
+    );
+  }
+
+  ajustarStock?.();
+  const llevadoPor = cuenta.grupo === "organizacion" ? datos.llevadoPor?.trim() : undefined;
+  const nota = datos.nota?.trim();
+  Object.assign(cargo, cambio, { editado: { por: usuario, fecha: ahora.toISOString() } });
+  if (llevadoPor) cargo.llevadoPor = llevadoPor;
+  else delete cargo.llevadoPor;
+  if (nota) cargo.nota = nota;
+  else delete cargo.nota;
+  return cargo;
+}
+
 export async function agregarCargo(
   cuentaId: string,
   datos: CargoInput,

@@ -34,11 +34,12 @@ import { centavos } from "@/lib/reglas/dinero";
 import { formatQ } from "@/lib/format";
 import { pedirApi, postApi } from "@/lib/http";
 import { cargosPendientes, montoPagoCargos, totalCargo } from "@/lib/reglas/cuentas";
-import type { DetalleCuenta as Detalle, PagoCuenta } from "@/types/pendiente";
+import type { Cargo, DetalleCuenta as Detalle, PagoCuenta } from "@/types/pendiente";
 import { ComprobantePago, EstadoCuenta } from "./Documentos";
 import { ModalAbono } from "./ModalAbono";
 import { ModalCargo } from "./ModalCargo";
 import { ModalCuenta } from "./ModalCuenta";
+import { ModalEditarCargo } from "./ModalEditarCargo";
 
 /** Cuenta de un cliente u organización: cargos, pagos, saldo y comprobantes. */
 export function DetalleCuenta({
@@ -61,6 +62,7 @@ export function DetalleCuenta({
   const [modal, setModal] = useState<
     "cargo" | "abono" | "editar" | "estado" | "pagar" | "eliminar" | null
   >(null);
+  const [editando, setEditando] = useState<Cargo | null>(null);
   const [comprobante, setComprobante] = useState<{ pago: PagoCuenta; detalle: Detalle } | null>(
     null,
   );
@@ -204,6 +206,11 @@ export function DetalleCuenta({
                 <Th numeric>Precio</Th>
                 <Th numeric>Total</Th>
                 <Th>Estado</Th>
+                {!soloLectura && (
+                  <Th className="w-12">
+                    <span className="sr-only">Editar</span>
+                  </Th>
+                )}
               </tr>
             </THead>
             <TBody>
@@ -242,6 +249,8 @@ export function DetalleCuenta({
                       {c.nota && <span className="block text-small text-ink-muted">{c.nota}</span>}
                       <span className="block text-small text-ink-muted">
                         Registró {c.registradoPor}
+                        {c.editado &&
+                          ` · Editado por ${c.editado.por} el ${formatFecha(c.editado.fecha)}`}
                       </span>
                     </Td>
                     {esOrg && (
@@ -267,6 +276,21 @@ export function DetalleCuenta({
                         <Chip tono="bg-gold-100 text-gold-text">Pendiente</Chip>
                       )}
                     </Td>
+                    {!soloLectura && (
+                      <Td>
+                        {!pagado && (
+                          <Button
+                            variant="icon"
+                            size="sm"
+                            aria-label={`Editar ${c.descripcion}`}
+                            title="Editar"
+                            onClick={() => setEditando(c)}
+                          >
+                            <Pencil />
+                          </Button>
+                        )}
+                      </Td>
+                    )}
                   </Tr>
                 );
               })}
@@ -318,6 +342,9 @@ export function DetalleCuenta({
       )}
 
       {modal === "cargo" && <ModalCargo cuenta={cuenta} onClose={() => setModal(null)} />}
+      {editando && (
+        <ModalEditarCargo cuenta={cuenta} cargo={editando} onClose={() => setEditando(null)} />
+      )}
       {modal === "abono" && (
         <ModalAbono detalle={detalle} onClose={() => setModal(null)} onPagado={alPagar} />
       )}

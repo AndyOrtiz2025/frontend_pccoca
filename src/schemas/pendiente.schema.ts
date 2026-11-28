@@ -65,3 +65,22 @@ export const pagarCargosSchema = z.object({
   cargoIds: z.array(z.string().min(1)).min(1, "Selecciona al menos un cargo").max(200),
   nota: z.string().trim().max(200).optional(),
 });
+
+/**
+ * Corregir un cargo que todavía no se pagó. El producto no cambia (para eso se agrega otro):
+ * - producto: cantidad (el stock se ajusta), quién se lo llevó y nota.
+ * - libre: también la descripción y el precio.
+ */
+export const editarCargoSchema = z.discriminatedUnion("tipo", [
+  z.object({ tipo: z.literal("producto"), ...comunCargo }),
+  z.object({
+    tipo: z.literal("libre"),
+    ...comunCargo,
+    descripcion: z.string().trim().min(2, "Describe qué se llevó").max(150),
+    precioUnitario: z
+      .number({ error: "Escribe el precio" })
+      .positive("El precio debe ser mayor a 0")
+      .max(100_000),
+  }),
+]);
+export type EditarCargoInput = z.infer<typeof editarCargoSchema>;
