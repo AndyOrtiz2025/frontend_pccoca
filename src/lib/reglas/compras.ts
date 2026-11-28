@@ -93,7 +93,15 @@ export function aplicarCompra(
 // ─── Historial de un producto (kardex) ───────────────────────
 
 export type TipoEventoHistorial =
-  "venta" | "fiado" | "compra" | "merma" | "consumo_interno" | "abrir_paquete" | "reposicion";
+  | "venta"
+  | "fiado"
+  | "compra"
+  | "merma"
+  | "consumo_interno"
+  | "abrir_paquete"
+  | "reposicion"
+  | "devolucion"
+  | "cambio";
 
 export const ETIQUETA_EVENTO: Record<TipoEventoHistorial, string> = {
   venta: "Venta",
@@ -103,6 +111,8 @@ export const ETIQUETA_EVENTO: Record<TipoEventoHistorial, string> = {
   consumo_interno: "Consumo interno",
   abrir_paquete: "Se abrió",
   reposicion: "Reposición del proveedor",
+  devolucion: "Devolución de cliente",
+  cambio: "Se lo llevó a cambio",
 };
 
 /** Cambio en el stock: cuántas unidades (simple o sueltas) y cuántos paquetes. */
@@ -154,6 +164,22 @@ export interface FuentesHistorial {
     presentacion: Presentacion;
     cantidad: number;
     proveedor: string;
+    por: string;
+  }[];
+  /** Devuelto en buen estado (vuelve al stock). Los defectuosos no mueven el stock. */
+  devoluciones?: {
+    fecha: string;
+    presentacion: Presentacion;
+    cantidad: number;
+    numero: string;
+    por: string;
+  }[];
+  /** Lo que el cliente se llevó a cambio de su saldo a favor. */
+  cambios?: {
+    fecha: string;
+    presentacion: Presentacion;
+    cantidad: number;
+    numero: string;
     por: string;
   }[];
 }
@@ -208,6 +234,20 @@ export function construirHistorial(producto: Producto, f: FuentesHistorial): Eve
       detalle: r.proveedor,
       cambio: cambio(r.presentacion, r.cantidad),
       registradoPor: r.por,
+    })),
+    ...(f.devoluciones ?? []).map((d) => ({
+      fecha: d.fecha,
+      tipo: "devolucion" as const,
+      detalle: `Devolución ${d.numero}`,
+      cambio: cambio(d.presentacion, d.cantidad),
+      registradoPor: d.por,
+    })),
+    ...(f.cambios ?? []).map((d) => ({
+      fecha: d.fecha,
+      tipo: "cambio" as const,
+      detalle: `Devolución ${d.numero}`,
+      cambio: cambio(d.presentacion, -d.cantidad),
+      registradoPor: d.por,
     })),
   ].sort((a, b) => b.fecha.localeCompare(a.fecha));
 

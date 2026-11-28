@@ -32,6 +32,9 @@ import {
 } from "@/lib/reglas/pedidos";
 import type { NuevoPrecioInput, PedidoInput, RecibirPedidoInput } from "@/schemas/pedido.schema";
 import type { EstadoPedido, LineaPedido, Pedido } from "@/types/pedido";
+import type { DevolucionInput } from "@/schemas/devolucion.schema";
+import type { Devolucion, LineaDevuelta } from "@/types/devolucion";
+import { cuadreCambio, diasEntre, fueraDePlazo, numeroDevolucion } from "@/lib/reglas/devoluciones";
 import type { MermaInput, ProductoInput } from "@/schemas/producto.schema";
 import type { SubcategoriaInput } from "@/schemas/subcategoria.schema";
 import type { Compra, EstadoReclamo, Proveedor, Reclamo } from "@/types/proveedor";
@@ -384,7 +387,11 @@ export async function obtenerDetalleProveedor(
         ...r,
         nombre: producto(r.productoId)?.nombre ?? "Producto eliminado",
         nombrePaquete: producto(r.productoId)?.fraccionable?.nombrePaquete,
-        factura: a.compras.find((c) => c.id === r.compraId)?.factura,
+        factura:
+          a.compras.find((c) => c.id === r.compraId)?.factura ??
+          (r.devolucionId
+            ? `Devolución de cliente ${numeroDevolucion({ id: r.devolucionId })}`
+            : undefined),
       })),
     comprasAnio: compras.filter((c) => diaDeGuatemala(c.fecha).startsWith(anio)).length,
     productosQueSurte: surte.size,
@@ -573,6 +580,259 @@ export async function resolverReclamo(
     ...(datos.nota && { nota: datos.nota }),
   };
   return reclamo;
+}
+
+// ─── Devoluciones de clientes ────────────────────────────────
+
+/** Cuántas de esa línea de la venta ya se devolvieron antes. */
+function yaDevueltas(comprobanteId: string, productoId: string, presentacion: string) {
+  return almacen()
+    .devoluciones.filter((d) => d.comprobanteId === comprobanteId)
+    .flatMap((d) => d.devuelto)
+    .filter((l) => l.productoId === productoId && l.presentacion === presentacion)
+    .reduce((t, l) => t + l.cantidad, 0);
+}
+
+/** Producto de una línea del comprobante (las ventas viejas solo guardaban el código). */
+function productoDeLinea(l: Comprobante["lineas"][number]) {
+  const ps = almacen().productos;
+  return l.productoId
+    ? ps.find((p) => p.id === l.productoId)
+    : ps.find((p) => p.codigo === l.codigo);
+}
+
+export interface VentaParaDevolucion {
+  id: string;
+  numero: string;
+  fecha: string;
+  atendio: string;
+  dias: number;
+  lineas: {
+    productoId: string;
+    codigo: string;
+    nombre: string;
+    presentacion: Comprobante["lineas"][number]["presentacion"];
+    nombrePaquete?: string;
+    precioUnitario: number;
+    vendidas: number;
+    /** Lo que todavía se puede devolver (vendidas − ya devueltas). */
+    disponibles: number;
+  }[];
+}
+
+/** Buscar la venta por el número del comprobante (cualquier empleado la puede buscar). */
+export async function buscarVentaParaDevolucion(
+  numero: string,
+  ahora = new Date(),
+): Promise<VentaParaDevolucion | null> {
+  const n = numero
+    .trim()
+    .toUpperCase()
+    .replace(/^NO\.?\s*/, "");
+  if (!/^[A-Z0-9]{4,12}$/.test(n)) return null;
+  const c = almacen().comprobantes.find((x) => numeroComprobante(x) === n);
+  if (!c) return null;
+  return {
+    id: c.id,
+    numero: numeroComprobante(c),
+    fecha: c.fecha,
+    atendio: c.atendio,
+    dias: diasEntre(diaDeGuatemala(c.fecha), diaDeGuatemala(ahora)),
+    lineas: c.lineas.flatMap((l) => {
+      const p = productoDeLinea(l);
+      if (!p) return [];
+      const devueltas = yaDevueltas(c.id, p.id, l.presentacion);
+      return [
+        {
+          productoId: p.id,
+          codigo: l.codigo,
+          nombre: l.nombre,
+          presentacion: l.presentacion,
+          nombrePaquete: l.nombrePaquete,
+          precioUnitario: l.precioUnitario,
+          vendidas: l.cantidad,
+          disponibles: Math.max(0, l.cantidad - devueltas),
+        },
+      ];
+    }),
+  };
+}
+
+export interface ResultadoDevolucion {
+  devolucion: Devolucion;
+  /** Productos que cambiaron de stock, como los ve el Empleado (semáforo). */
+  productos: ProductoVenta[];
+}
+
+/**
+ * Devolución de un cliente (solo ventas pagadas), todo o nada:
+ * - Hasta 3 días desde la compra; después, con la autorización de Paola u Oscar.
+ * - Con comprobante vale lo que pagó; sin comprobante, el precio actual.
+ * - Buen estado: vuelve al stock. Defectuoso: no vuelve; queda como reclamo al proveedor.
+ * - Nunca se devuelve dinero: el saldo se usa completo en lo que se lleva; si se pasa, paga la diferencia.
+ */
+export async function registrarDevolucion(
+  datos: DevolucionInput,
+  vendedor: Vendedor,
+  ahora = new Date(),
+): Promise<ResultadoDevolucion> {
+  const a = almacen();
+  const hoy = diaDeGuatemala(ahora);
+  const comprobante = datos.comprobanteId
+    ? a.comprobantes.find((c) => c.id === datos.comprobanteId)
+    : undefined;
+  if (datos.comprobanteId && !comprobante) throw new ReglaNegocioError("Esa venta no existe");
+  const fechaCompra = comprobante ? diaDeGuatemala(comprobante.fecha) : datos.fechaCompra!;
+  if (fechaCompra > hoy) throw new ReglaNegocioError("La fecha de compra no puede ser futura");
+  const dias = diasEntre(fechaCompra, hoy);
+  if (fueraDePlazo(dias) && !datos.autorizo) {
+    throw new ReglaNegocioError(
+      `Pasaron ${dias} días desde la compra: necesita la autorización de Paola u Oscar`,
+    );
+  }
+
+  const porId = new Map(a.productos.map((p) => [p.id, p]));
+  const stocks = new Map<string, Producto["stock"]>();
+  const stockDe = (p: Producto) => stocks.get(p.id) ?? p.stock;
+
+  // 1. Lo que devuelve: cuánto vale y qué vuelve al stock.
+  const claves = new Set<string>();
+  const pedidasDeLinea = new Map<string, number>();
+  const devuelto: LineaDevuelta[] = datos.devuelto.map((d) => {
+    const p = porId.get(d.productoId);
+    if (!p) throw new ReglaNegocioError("Uno de los productos devueltos ya no existe");
+    const clave = `${p.id}|${d.presentacion}|${d.estado}`;
+    if (claves.has(clave))
+      throw new ReglaNegocioError(`${p.nombre} está repetido: suma las cantidades`);
+    claves.add(clave);
+    let precioUnitario: number;
+    if (comprobante) {
+      const l = comprobante.lineas.find(
+        (x) => productoDeLinea(x)?.id === p.id && x.presentacion === d.presentacion,
+      );
+      if (!l) throw new ReglaNegocioError(`${p.nombre} no está en esa venta`);
+      const k = `${p.id}|${d.presentacion}`;
+      const pedidas = (pedidasDeLinea.get(k) ?? 0) + d.cantidad;
+      pedidasDeLinea.set(k, pedidas);
+      const disponibles = l.cantidad - yaDevueltas(comprobante.id, p.id, d.presentacion);
+      if (pedidas > disponibles) {
+        throw new ReglaNegocioError(
+          disponibles > 0
+            ? `De ${p.nombre} solo se pueden devolver ${disponibles}`
+            : `${p.nombre} ya se devolvió completo`,
+        );
+      }
+      precioUnitario = l.precioUnitario;
+    } else {
+      if (d.presentacion === "paquete" && !p.fraccionable) {
+        throw new ReglaNegocioError(`${p.nombre} no se vende por caja`);
+      }
+      precioUnitario = d.presentacion === "paquete" ? p.fraccionable!.precioPaquete : p.precio;
+    }
+    if (d.estado === "buen_estado")
+      stocks.set(p.id, sumarAlStock(stockDe(p), d.presentacion, d.cantidad));
+    return {
+      productoId: p.id,
+      codigo: p.codigo,
+      nombre: p.nombre,
+      presentacion: d.presentacion,
+      ...(d.presentacion === "paquete" && {
+        nombrePaquete: p.fraccionable?.nombrePaquete ?? "Paquete",
+      }),
+      cantidad: d.cantidad,
+      precioUnitario,
+      subtotal: centavos(precioUnitario * d.cantidad),
+      estado: d.estado,
+      ...(d.nota && { nota: d.nota }),
+    };
+  });
+  const saldo = centavos(devuelto.reduce((t, l) => t + l.subtotal, 0));
+
+  // 2. Lo que se lleva: como una venta (precio con mayoreo, stock, producto activo).
+  const lineasLlevo: LineaCarrito[] = datos.llevo.map((l) => ({ ...l, tipo: "venta" }));
+  const ids = lineasLlevo.map((l) => `${l.productoId}|${l.presentacion}`);
+  if (new Set(ids).size !== ids.length) {
+    throw new ReglaNegocioError("Un producto que se lleva está repetido: suma las cantidades");
+  }
+  for (const l of lineasLlevo) {
+    const p = porId.get(l.productoId);
+    if (!p || !p.activo)
+      throw new ReglaNegocioError("Uno de los productos que se lleva ya no existe");
+    const error = validarLinea(l, aVistaEmpleado(p));
+    if (error) throw new ReglaNegocioError(`${p.nombre}: ${error}`);
+    try {
+      stocks.set(p.id, descontarStock(stockDe(p), l.presentacion, l.cantidad));
+    } catch (e) {
+      throw new ReglaNegocioError(`${p.nombre}: ${(e as Error).message}`);
+    }
+  }
+  const calculado = calcularCarrito(
+    lineasLlevo,
+    new Map([...porId].map(([id, p]) => [id, aVistaEmpleado(p)])),
+  );
+  const llevo = generarComprobante(calculado, {
+    id: "x",
+    fecha: "",
+    atendio: "",
+    usuario: "",
+  })!.lineas;
+  const totalLlevo = calculado.total;
+  const { falta, diferencia } = cuadreCambio(saldo, totalLlevo);
+  if (falta > 0) {
+    throw new ReglaNegocioError(
+      `Falta escoger ${formatQ(falta)}: el saldo a favor se usa completo, no se devuelve dinero`,
+    );
+  }
+
+  // 3. Todo validado: se guarda.
+  const devolucion: Devolucion = {
+    id: `D-${crypto.randomUUID()}`,
+    fecha: ahora.toISOString(),
+    atendio: vendedor.nombre,
+    usuario: vendedor.usuario,
+    ...(comprobante && {
+      comprobanteId: comprobante.id,
+      numeroCompra: numeroComprobante(comprobante),
+    }),
+    fechaCompra,
+    dias,
+    ...(fueraDePlazo(dias) && datos.autorizo && { autorizo: datos.autorizo }),
+    devuelto,
+    saldo,
+    llevo,
+    totalLlevo,
+    diferencia,
+  };
+  for (const [id, stock] of stocks) porId.get(id)!.stock = stock;
+  for (const l of devuelto.filter((x) => x.estado === "defectuoso")) {
+    const p = porId.get(l.productoId)!;
+    // Sin proveedor no hay a quién reclamarle: queda solo en la devolución (cuenta como pérdida).
+    if (!p.proveedorId) continue;
+    const costo = l.presentacion === "paquete" ? p.fraccionable?.costoPaquete : p.costo;
+    a.reclamos.push({
+      id: `R-${crypto.randomUUID()}`,
+      proveedorId: p.proveedorId,
+      devolucionId: devolucion.id,
+      productoId: p.id,
+      presentacion: l.presentacion,
+      cantidad: l.cantidad,
+      costoUnitario: costo ?? 0,
+      motivo: l.nota ?? "Defectuoso (devolución de cliente)",
+      fecha: devolucion.fecha,
+      estado: "pendiente",
+    });
+  }
+  a.devoluciones.push(devolucion);
+  return {
+    devolucion,
+    productos: [...stocks.keys()].map((id) => aVistaEmpleado(porId.get(id)!)),
+  };
+}
+
+/** Devoluciones para Paola y Oscar, las más recientes primero. */
+export async function obtenerDevoluciones(rol: Rol): Promise<Devolucion[]> {
+  exigirAdmin(rol);
+  return [...almacen().devoluciones].sort((x, y) => y.fecha.localeCompare(x.fecha));
 }
 
 // ─── Pedidos al proveedor ────────────────────────────────────
@@ -981,6 +1241,28 @@ export async function obtenerHistorialProducto(
         proveedor: nombreProveedor(r.proveedorId),
         por: r.resolucion!.por,
       })),
+    devoluciones: a.devoluciones.flatMap((d) =>
+      d.devuelto
+        .filter((l) => l.productoId === producto.id && l.estado === "buen_estado")
+        .map((l) => ({
+          fecha: d.fecha,
+          presentacion: l.presentacion,
+          cantidad: l.cantidad,
+          numero: numeroDevolucion(d),
+          por: d.atendio,
+        })),
+    ),
+    cambios: a.devoluciones.flatMap((d) =>
+      d.llevo
+        .filter((l) => l.productoId === producto.id)
+        .map((l) => ({
+          fecha: d.fecha,
+          presentacion: l.presentacion,
+          cantidad: l.cantidad,
+          numero: numeroDevolucion(d),
+          por: d.atendio,
+        })),
+    ),
   });
 }
 

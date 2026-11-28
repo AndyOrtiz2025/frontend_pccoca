@@ -74,6 +74,8 @@ export interface Reclamo {
   id: string;
   proveedorId: string;
   compraId?: string;
+  /** Defectuoso que devolvió un cliente. */
+  devolucionId?: string;
   productoId: string;
   presentacion: Presentacion;
   cantidad: number;
