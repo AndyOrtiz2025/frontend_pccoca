@@ -1,0 +1,16 @@
+# Escaneo de secretos (gitleaks): usa las reglas por defecto y solo excluye datos de prueba que
+# no son secretos reales. Nunca agregues aquí un archivo con una clave de verdad.
+title = "PC Coca"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Datos de prueba (no son secretos reales)"
+paths = [
+  '''^\.env\.example$''',
+  '''^e2e/''',
+  '''^playwright\.config\.ts$''',
+  '''^src/lib/auth/mock-users\.ts$''',
+  '''\.test\.tsx?$''',
+]

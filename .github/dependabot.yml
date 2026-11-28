@@ -1,0 +1,20 @@
+# Dependabot: solo PRs de seguridad (cuando una librería tiene una vulnerabilidad conocida).
+# Las actualizaciones normales de versión están apagadas (open-pull-requests-limit: 0);
+# esas las hacemos a mano cuando haya algo útil.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "fix(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "ci(deps)"

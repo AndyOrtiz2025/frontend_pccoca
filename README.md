@@ -35,15 +35,34 @@ En producción (`npm run build && npm start`) la app exige `SESSION_SECRET` en e
 
 ## Scripts
 
-| Comando             | Qué hace                        |
-| ------------------- | ------------------------------- |
-| `npm run dev`       | Servidor de desarrollo          |
-| `npm run build`     | Build de producción             |
-| `npm run lint`      | ESLint                          |
-| `npm run typecheck` | Revisión de tipos de TypeScript |
-| `npm test`          | Pruebas con Vitest              |
-| `npm run test:e2e`  | Pruebas end-to-end (Playwright) |
-| `npm run format`    | Da formato con Prettier         |
+| Comando                 | Qué hace                                        |
+| ----------------------- | ----------------------------------------------- |
+| `npm run dev`           | Servidor de desarrollo                          |
+| `npm run build`         | Build de producción                             |
+| `npm run lint`          | ESLint                                          |
+| `npm run typecheck`     | Revisión de tipos de TypeScript                 |
+| `npm test`              | Pruebas con Vitest                              |
+| `npm run test:coverage` | Pruebas con cobertura (mínimo 80% en la lógica) |
+| `npm run test:e2e`      | Pruebas end-to-end (Playwright)                 |
+| `npm run format`        | Da formato con Prettier                         |
+
+## CI (GitHub Actions)
+
+Cada PR hacia `development` o `main` corre:
+
+| Paso                           | Qué revisa                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| Lint, pruebas y build          | Formato, ESLint, tipos, pruebas unitarias con cobertura mínima y build         |
+| Pruebas end-to-end             | Las pantallas con cada rol (Playwright)                                        |
+| Escaneo de secretos            | Contraseñas o claves escritas por error (gitleaks, reglas en `.gitleaks.toml`) |
+| Revisión de dependencias       | Librerías nuevas o actualizadas con vulnerabilidades altas o críticas          |
+| Análisis de seguridad (CodeQL) | Problemas de seguridad en el código (también corre cada lunes)                 |
+
+**Cobertura:** el mínimo de 80% se mide sobre la lógica (`src/lib` y `src/schemas`); las pantallas
+las cubren las pruebas end-to-end. Se configura en `vitest.config.ts`.
+
+**Dependabot** (`.github/dependabot.yml`) solo abre PRs cuando una librería tiene una
+vulnerabilidad conocida; las actualizaciones normales de versión se hacen a mano.
 
 ## Pruebas end-to-end
 

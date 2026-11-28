@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   build:
@@ -25,7 +26,8 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      # Pruebas unitarias con cobertura mínima de 80% en la lógica (vitest.config.ts).
+      - run: npm run test:coverage
       - run: npm run build
 
   e2e:
@@ -52,3 +54,27 @@ jobs:
           name: reporte-e2e
           path: playwright-report/
           retention-days: 7
+
+  secretos:
+    name: Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Busca contraseñas, tokens o claves escritas por error (reglas en .gitleaks.toml).
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependencias:
+    name: Revisión de dependencias
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Falla si el PR agrega o actualiza una librería con una vulnerabilidad alta o crítica.
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
