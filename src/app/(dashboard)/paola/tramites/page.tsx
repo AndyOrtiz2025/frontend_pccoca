@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/layout/EnConstruccion";
+import { CatalogoTramitesAdmin } from "@/components/tramites/CatalogoTramitesAdmin";
+import { obtenerModulosTramite, obtenerTramitesAdmin } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Trámites" };
 
-export default function Page() {
-  return (
-    <EnConstruccion
-      descripcion="Catálogo de trámites con edición: agregar módulos y trámites."
-      referencia="Pantalla 20"
-    />
-  );
+/** Pantalla 20: catálogo de trámites con edición (módulos, requisitos y precios). */
+export default async function Page() {
+  const [modulos, tramites] = await Promise.all([
+    obtenerModulosTramite(),
+    obtenerTramitesAdmin("paola"),
+  ]);
+  return <CatalogoTramitesAdmin modulos={modulos} tramites={tramites} />;
 }

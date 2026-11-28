@@ -5,12 +5,14 @@ import type { EnProceso } from "@/types/proceso";
 import type { Categoria, Producto } from "@/types/producto";
 import type { Devolucion } from "@/types/devolucion";
 import type { Pedido } from "@/types/pedido";
+import type { CambioPrecioTramite, ModuloTramite, Tramite } from "@/types/tramite";
 import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 import type { Comprobante, TipoMovimiento } from "@/types/movimiento";
 import { CARGOS_DEMO, CUENTAS_DEMO, PAGOS_DEMO } from "./pendientes";
 import { ENTRADAS_DEMO, PROCESOS_DEMO } from "./procesos";
 import { PRODUCTOS_DEMO } from "./productos";
 import { COMPRAS_DEMO, PEDIDOS_DEMO, PROVEEDORES_DEMO, RECLAMOS_DEMO } from "./proveedores";
+import { MODULOS_TRAMITE_DEMO, TRAMITES_DEMO } from "./tramites";
 import { ventasDemo } from "./ventas";
 
 /** Movimiento que no es venta: consumo interno o merma (secciones 11.4 y 11.7). */
@@ -39,6 +41,9 @@ interface Almacen {
   reclamos: Reclamo[];
   pedidos: Pedido[];
   devoluciones: Devolucion[];
+  modulosTramite: ModuloTramite[];
+  tramites: Tramite[];
+  cambiosPrecioTramite: CambioPrecioTramite[];
   comprobantes: Comprobante[];
   movimientos: MovimientoRegistrado[];
   conversiones: ConversionRegistrada[];
@@ -75,6 +80,9 @@ export function almacen(): Almacen {
     reclamos: structuredClone(RECLAMOS_DEMO),
     pedidos: structuredClone(PEDIDOS_DEMO),
     devoluciones: [],
+    modulosTramite: structuredClone(MODULOS_TRAMITE_DEMO),
+    tramites: structuredClone(TRAMITES_DEMO),
+    cambiosPrecioTramite: [],
     comprobantes: ventasDemo(),
     movimientos: [],
     conversiones: [],

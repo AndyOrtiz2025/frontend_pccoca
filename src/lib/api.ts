@@ -1,7 +1,6 @@
 import "server-only";
 import type { Rol } from "@/lib/auth/roles";
 import { SERVICIOS_DEMO } from "@/lib/mocks/servicios";
-import { MODULOS_TRAMITE_DEMO, TRAMITES_DEMO } from "@/lib/mocks/tramites";
 import { detectarTipo, MAX_ARCHIVOS, MAX_BYTES_ARCHIVO, nombreSeguro } from "@/lib/archivos";
 import { formatQ } from "@/lib/format";
 import { almacen } from "@/lib/mocks/store";
@@ -33,6 +32,8 @@ import {
 import type { NuevoPrecioInput, PedidoInput, RecibirPedidoInput } from "@/schemas/pedido.schema";
 import type { EstadoPedido, LineaPedido, Pedido } from "@/types/pedido";
 import type { DevolucionInput } from "@/schemas/devolucion.schema";
+import type { TramiteInput } from "@/schemas/tramite.schema";
+import { idModulo, mismoPrecio, precioDesdeFormulario } from "@/lib/reglas/tramites";
 import type { Devolucion, LineaDevuelta } from "@/types/devolucion";
 import { cuadreCambio, diasEntre, fueraDePlazo, numeroDevolucion } from "@/lib/reglas/devoluciones";
 import type { MermaInput, ProductoInput } from "@/schemas/producto.schema";
@@ -66,7 +67,12 @@ import type { EstadoProceso } from "@/types/estados";
 import type { EnProceso, ServicioEnProceso, TramiteEnProceso } from "@/types/proceso";
 import type { Categoria, Producto, ProductoVenta } from "@/types/producto";
 import type { ServicioTecnico } from "@/types/servicio";
-import type { ModuloTramite, Tramite } from "@/types/tramite";
+import {
+  tramiteActivo,
+  type CambioPrecioTramite,
+  type ModuloTramite,
+  type Tramite,
+} from "@/types/tramite";
 import type { Empleado } from "@/types/usuario";
 
 /**
@@ -1372,11 +1378,168 @@ export async function obtenerImagen(id: string) {
 }
 
 export async function obtenerModulosTramite(): Promise<ModuloTramite[]> {
-  return [...MODULOS_TRAMITE_DEMO].sort((a, b) => a.orden - b.orden);
+  return [...almacen().modulosTramite].sort((a, b) => a.orden - b.orden);
 }
 
+/** Catálogo que ve el empleado: solo los trámites activos. */
 export async function obtenerTramites(): Promise<Tramite[]> {
-  return TRAMITES_DEMO;
+  return almacen().tramites.filter(tramiteActivo);
+}
+
+// ─── Catálogo de trámites (Paola) ────────────────────────────
+
+/** Solo Paola administra el catálogo de trámites (Oscar tiene servicios técnicos). */
+function exigirPaola(rol: Rol) {
+  if (rol !== "paola") throw new SinPermisoError();
+}
+
+export interface TramiteAdmin extends Tramite {
+  /** Cambios de precio, el más reciente primero. */
+  cambios: CambioPrecioTramite[];
+}
+
+/** Catálogo completo para Paola: activos e inactivos, con sus cambios de precio. */
+export async function obtenerTramitesAdmin(rol: Rol): Promise<TramiteAdmin[]> {
+  exigirPaola(rol);
+  const a = almacen();
+  return a.tramites.map((t) => ({
+    ...t,
+    cambios: a.cambiosPrecioTramite
+      .filter((c) => c.tramiteId === t.id)
+      .sort((x, y) => y.fecha.localeCompare(x.fecha)),
+  }));
+}
+
+function validarTramite(datos: TramiteInput, excepto?: string) {
+  const a = almacen();
+  if (!a.modulosTramite.some((m) => m.id === datos.moduloId)) {
+    throw new ReglaNegocioError("Ese módulo ya no existe");
+  }
+  const repetido = a.tramites.find(
+    (t) =>
+      t.id !== excepto &&
+      t.moduloId === datos.moduloId &&
+      normalizar(t.nombre) === normalizar(datos.nombre),
+  );
+  if (repetido) throw new ReglaNegocioError(`Ya existe "${repetido.nombre}" en ese módulo`);
+}
+
+export async function crearTramite(rol: Rol, datos: TramiteInput): Promise<Tramite> {
+  exigirPaola(rol);
+  validarTramite(datos);
+  const tramite: Tramite = {
+    id: `tr-${crypto.randomUUID()}`,
+    moduloId: datos.moduloId,
+    nombre: datos.nombre,
+    requisitos: datos.requisitos,
+    precio: precioDesdeFormulario(datos),
+  };
+  almacen().tramites.push(tramite);
+  return tramite;
+}
+
+/** Editar: si el precio cambió, queda guardado quién lo cambió y de cuánto a cuánto. */
+export async function editarTramite(
+  rol: Rol,
+  id: string,
+  datos: TramiteInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Tramite> {
+  exigirPaola(rol);
+  const a = almacen();
+  const tramite = a.tramites.find((t) => t.id === id);
+  if (!tramite) throw new ReglaNegocioError("Ese trámite ya no existe");
+  validarTramite(datos, id);
+  const precio = precioDesdeFormulario(datos);
+  if (!mismoPrecio(tramite.precio, precio)) {
+    a.cambiosPrecioTramite.push({
+      tramiteId: id,
+      fecha: ahora.toISOString(),
+      por: usuario,
+      antes: tramite.precio,
+      ahora: precio,
+    });
+  }
+  Object.assign(tramite, {
+    moduloId: datos.moduloId,
+    nombre: datos.nombre,
+    requisitos: datos.requisitos,
+    precio,
+  });
+  return tramite;
+}
+
+/** Desactivar (ya no le sale al empleado) o reactivar. Nunca se borra. */
+export async function cambiarActivoTramite(rol: Rol, id: string, activo: boolean) {
+  exigirPaola(rol);
+  const tramite = almacen().tramites.find((t) => t.id === id);
+  if (!tramite) throw new ReglaNegocioError("Ese trámite ya no existe");
+  tramite.activo = activo;
+}
+
+function moduloExistente(id: string): ModuloTramite {
+  const m = almacen().modulosTramite.find((x) => x.id === id);
+  if (!m) throw new ReglaNegocioError("Ese módulo ya no existe");
+  return m;
+}
+
+function nombreModuloLibre(nombre: string, excepto?: string) {
+  const repetido = almacen().modulosTramite.find(
+    (m) => m.id !== excepto && normalizar(m.nombre) === normalizar(nombre),
+  );
+  if (repetido) throw new ReglaNegocioError(`Ya existe el módulo "${repetido.nombre}"`);
+}
+
+/** Nuevo módulo: queda como última pestaña. */
+export async function crearModuloTramite(rol: Rol, nombre: string): Promise<ModuloTramite> {
+  exigirPaola(rol);
+  nombreModuloLibre(nombre);
+  const a = almacen();
+  const modulo: ModuloTramite = {
+    id: idModulo(
+      nombre,
+      a.modulosTramite.map((m) => m.id),
+    ),
+    nombre,
+    orden: Math.max(0, ...a.modulosTramite.map((m) => m.orden)) + 1,
+  };
+  a.modulosTramite.push(modulo);
+  return modulo;
+}
+
+export async function renombrarModuloTramite(rol: Rol, id: string, nombre: string) {
+  exigirPaola(rol);
+  const m = moduloExistente(id);
+  nombreModuloLibre(nombre, id);
+  m.nombre = nombre;
+}
+
+/** Cambiar el orden de las pestañas: se intercambia con el de al lado. */
+export async function moverModuloTramite(rol: Rol, id: string, hacia: "izquierda" | "derecha") {
+  exigirPaola(rol);
+  moduloExistente(id);
+  const orden = [...almacen().modulosTramite].sort((x, y) => x.orden - y.orden);
+  const i = orden.findIndex((m) => m.id === id);
+  const j = hacia === "izquierda" ? i - 1 : i + 1;
+  if (j < 0 || j >= orden.length) return;
+  [orden[i], orden[j]] = [orden[j]!, orden[i]!];
+  orden.forEach((m, k) => (m.orden = k + 1));
+}
+
+/** Eliminar un módulo: solo si ya no tiene trámites (ni desactivados). */
+export async function eliminarModuloTramite(rol: Rol, id: string) {
+  exigirPaola(rol);
+  moduloExistente(id);
+  const a = almacen();
+  const n = a.tramites.filter((t) => t.moduloId === id).length;
+  if (n > 0) {
+    throw new ReglaNegocioError(
+      `Tiene ${n} ${n === 1 ? "trámite" : "trámites"}: pásalos a otro módulo antes de eliminarlo`,
+    );
+  }
+  if (a.modulosTramite.length === 1) throw new ReglaNegocioError("Debe quedar al menos un módulo");
+  a.modulosTramite = a.modulosTramite.filter((m) => m.id !== id);
 }
 
 /** Catálogo de servicios técnicos. Paola no tiene acceso (sección 10.3). */
@@ -1549,8 +1712,10 @@ export async function crearEntradaTramite(
   archivosEntrantes: ArchivoEntrante[] = [],
   ahora = new Date(),
 ): Promise<EntradaTramite> {
-  const tramite = TRAMITES_DEMO.find((t) => t.id === datos.tramiteId);
-  if (!tramite) throw new ReglaNegocioError("Ese trámite ya no existe en el catálogo");
+  const tramite = almacen().tramites.find((t) => t.id === datos.tramiteId);
+  if (!tramite || !tramiteActivo(tramite)) {
+    throw new ReglaNegocioError("Ese trámite ya no está en el catálogo");
+  }
 
   // El anticipo no puede cubrir todo el precio: en ese caso es "Cancelado".
   const precioMax = tramite.precio.montoMax ?? tramite.precio.monto;
@@ -1572,7 +1737,7 @@ export async function crearEntradaTramite(
       datos: a.datos,
     };
   });
-  const modulo = MODULOS_TRAMITE_DEMO.find((m) => m.id === tramite.moduloId);
+  const modulo = almacen().modulosTramite.find((m) => m.id === tramite.moduloId);
   // Solo se aceptan requisitos que el trámite realmente pide.
   const documentos = tramite.requisitos.map((nombre) => ({
     nombre,
@@ -1722,7 +1887,7 @@ export async function convertirEntrada(rol: Rol, id: string): Promise<EnProceso>
   };
   let proceso: EnProceso;
   if (entrada.tipo === "tramite") {
-    const tramite = TRAMITES_DEMO.find((t) => t.id === entrada.tramiteId);
+    const tramite = almacen().tramites.find((t) => t.id === entrada.tramiteId);
     const precio = tramite ? precioFijo(tramite.precio) : undefined;
     proceso = {
       ...base,
