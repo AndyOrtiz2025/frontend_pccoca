@@ -32,6 +32,7 @@ import {
 import type { NuevoPrecioInput, PedidoInput, RecibirPedidoInput } from "@/schemas/pedido.schema";
 import type { EstadoPedido, LineaPedido, Pedido } from "@/types/pedido";
 import type { DevolucionInput } from "@/schemas/devolucion.schema";
+import type { EditarCargoInput } from "@/schemas/pendiente.schema";
 import type { TramiteInput } from "@/schemas/tramite.schema";
 import { idModulo, mismoPrecio, precioDesdeFormulario } from "@/lib/reglas/tramites";
 import type { Devolucion, LineaDevuelta } from "@/types/devolucion";
@@ -52,7 +53,13 @@ import { diaDeGuatemala } from "@/lib/fechas";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
 import type { CargoInput, CuentaInput } from "@/schemas/pendiente.schema";
-import { calcularSaldo, cargosPendientes, montoPagoCargos } from "@/lib/reglas/cuentas";
+import {
+  calcularSaldo,
+  cargosPendientes,
+  debeDesde,
+  montoPagoCargos,
+  totalCargo,
+} from "@/lib/reglas/cuentas";
 import { normalizar } from "@/lib/reglas/busqueda";
 import type { Contadores } from "@/types/contadores";
 import type { Comprobante, LineaCarrito } from "@/types/movimiento";
@@ -62,6 +69,8 @@ import type {
   DetalleCuenta,
   PagoCuenta,
   ResumenCuenta,
+  ResumenPendientes,
+  ActividadPendiente,
 } from "@/types/pendiente";
 import type { EstadoProceso } from "@/types/estados";
 import type { EnProceso, ServicioEnProceso, TramiteEnProceso } from "@/types/proceso";
@@ -2095,8 +2104,9 @@ function buscarCuenta(id: string): CuentaPendiente {
 }
 
 /** Lista de cuentas: primero las que deben, luego por último movimiento. */
-export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
+export async function obtenerCuentas(rol: Rol, ahora = new Date()): Promise<ResumenCuenta[]> {
   exigirAccesoPendientes(rol);
+  const hoy = diaDeGuatemala(ahora);
   return almacen()
     .cuentas.map((cuenta) => {
       const d = detalleDe(cuenta);
@@ -2105,11 +2115,13 @@ export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
         ...d.cargos.map((c) => c.fecha),
         ...d.pagos.map((p) => p.fecha),
       ];
+      const desde = debeDesde(d.cargos, d.pagos);
       return {
         cuenta,
         cargosPendientes: cargosPendientes(d.cargos).length,
         saldo: d.saldo,
         ultimoMovimiento: fechas.sort().at(-1)!,
+        ...(desde && { diasDebiendo: Math.max(0, diasEntre(diaDeGuatemala(desde), hoy)) }),
       };
     })
     .sort(
@@ -2117,6 +2129,57 @@ export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
         Number(y.saldo > 0) - Number(x.saldo > 0) ||
         y.ultimoMovimiento.localeCompare(x.ultimoMovimiento),
     );
+}
+
+/**
+ * Resumen de Pendientes para Paola: cuánto hay por cobrar, lo fiado y lo cobrado este mes, y lo
+ * último que registraron los empleados. Solo lectura: Paola no registra ni modifica fiados.
+ */
+export async function obtenerResumenPendientes(
+  rol: Rol,
+  ahora = new Date(),
+): Promise<ResumenPendientes> {
+  if (rol !== "paola") throw new SinPermisoError();
+  const a = almacen();
+  const mes = diaDeGuatemala(ahora).slice(0, 7);
+  const delMes = (fecha: string) => diaDeGuatemala(fecha).startsWith(mes);
+  const nombre = new Map(a.cuentas.map((c) => [c.id, c.nombre]));
+  const saldos = a.cuentas.map((c) => saldoDe(c.id));
+  const cargos = a.cargos.filter((c) => nombre.has(c.cuentaId));
+  const pagos = a.pagos.filter((p) => nombre.has(p.cuentaId));
+  const actividad: ActividadPendiente[] = [
+    ...cargos.map((c) => ({
+      id: c.id,
+      fecha: c.fecha,
+      tipo: "cargo" as const,
+      cuentaId: c.cuentaId,
+      cuenta: nombre.get(c.cuentaId)!,
+      por: c.registradoPor,
+      detalle: `${c.cantidad} × ${c.descripcion}`,
+      monto: totalCargo(c),
+    })),
+    ...pagos.map((p) => ({
+      id: p.id,
+      fecha: p.fecha,
+      tipo: p.tipo === "abono" ? ("abono" as const) : ("pago" as const),
+      cuentaId: p.cuentaId,
+      cuenta: nombre.get(p.cuentaId)!,
+      por: p.registradoPor,
+      ...(p.nota && { detalle: p.nota }),
+      monto: p.monto,
+    })),
+  ]
+    .sort((x, y) => y.fecha.localeCompare(x.fecha))
+    .slice(0, 12);
+  return {
+    porCobrar: centavos(saldos.reduce((s, x) => s + x, 0)),
+    cuentasConSaldo: saldos.filter((x) => x > 0).length,
+    fiadoMes: centavos(
+      cargos.filter((c) => delMes(c.fecha)).reduce((s, c) => s + totalCargo(c), 0),
+    ),
+    cobradoMes: centavos(pagos.filter((p) => delMes(p.fecha)).reduce((s, p) => s + p.monto, 0)),
+    actividad,
+  };
 }
 
 export async function obtenerCuenta(rol: Rol, id: string): Promise<DetalleCuenta | null> {
@@ -2168,6 +2231,87 @@ export async function editarCuenta(id: string, datos: CuentaInput): Promise<Cuen
 /**
  * Agregar lo que se llevó fiado. De producto: precio del servidor (con mayoreo) y descuenta stock.
  */
+/**
+ * Corregir un cargo que todavía no se pagó (cualquier empleado). Si es de un producto y cambia la
+ * cantidad, el stock se ajusta y el precio se recalcula (con mayoreo). Queda guardado quién lo
+ * corrigió. El total no puede quedar por debajo de lo que el cliente ya abonó.
+ */
+export async function editarCargo(
+  cuentaId: string,
+  cargoId: string,
+  datos: EditarCargoInput,
+  usuario: string,
+  ahora = new Date(),
+): Promise<Cargo> {
+  const cuenta = buscarCuenta(cuentaId);
+  const a = almacen();
+  const cargo = a.cargos.find((c) => c.id === cargoId && c.cuentaId === cuenta.id);
+  if (!cargo) throw new ReglaNegocioError("Ese cargo ya no existe");
+  if (cargo.pagoId) {
+    throw new ReglaNegocioError("Ese cargo ya se pagó: ya no se puede editar");
+  }
+  if ((datos.tipo === "producto") !== Boolean(cargo.productoId)) {
+    throw new ReglaNegocioError("El tipo del cargo no coincide");
+  }
+
+  let cambio: Partial<Cargo> = {};
+  let ajustarStock: (() => void) | undefined;
+  if (datos.tipo === "producto") {
+    const producto = a.productos.find((p) => p.id === cargo.productoId);
+    if (!producto) throw new ReglaNegocioError("Ese producto ya no existe");
+    const diferencia = datos.cantidad - cargo.cantidad;
+    if (diferencia !== 0) {
+      let stock: Producto["stock"];
+      try {
+        stock =
+          diferencia > 0
+            ? descontarStock(producto.stock, "unidad", diferencia)
+            : sumarAlStock(producto.stock, "unidad", -diferencia);
+      } catch (e) {
+        throw new ReglaNegocioError(`${producto.nombre}: ${(e as Error).message}`);
+      }
+      ajustarStock = () => (producto.stock = stock);
+    }
+    cambio = {
+      cantidad: datos.cantidad,
+      precioUnitario:
+        diferencia === 0
+          ? cargo.precioUnitario
+          : calcularPrecio(producto, "unidad", datos.cantidad).unitario,
+    };
+  } else {
+    cambio = {
+      cantidad: datos.cantidad,
+      descripcion: datos.descripcion.trim(),
+      precioUnitario: datos.precioUnitario,
+    };
+  }
+
+  // Lo que ya abonó no se puede quedar "de más".
+  const otros = a.cargos.filter((c) => c.cuentaId === cuenta.id && c.id !== cargo.id);
+  const pagos = a.pagos.filter((p) => p.cuentaId === cuenta.id);
+  const nuevoTotal = centavos(
+    otros.reduce((s, c) => s + totalCargo(c), 0) +
+      totalCargo({ cantidad: cambio.cantidad!, precioUnitario: cambio.precioUnitario! }),
+  );
+  const pagado = centavos(pagos.reduce((s, p) => s + p.monto, 0));
+  if (nuevoTotal < pagado) {
+    throw new ReglaNegocioError(
+      `Ya pagó ${formatQ(pagado)}: el total de la cuenta no puede quedar en menos de eso`,
+    );
+  }
+
+  ajustarStock?.();
+  const llevadoPor = cuenta.grupo === "organizacion" ? datos.llevadoPor?.trim() : undefined;
+  const nota = datos.nota?.trim();
+  Object.assign(cargo, cambio, { editado: { por: usuario, fecha: ahora.toISOString() } });
+  if (llevadoPor) cargo.llevadoPor = llevadoPor;
+  else delete cargo.llevadoPor;
+  if (nota) cargo.nota = nota;
+  else delete cargo.nota;
+  return cargo;
+}
+
 export async function agregarCargo(
   cuentaId: string,
   datos: CargoInput,

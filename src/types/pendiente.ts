@@ -31,6 +31,8 @@ export interface Cargo {
   registradoPor: string;
   /** Si se pagó con "Pagar seleccionados": el pago que lo cerró. */
   pagoId?: string;
+  /** Última corrección: quién y cuándo (solo interno, no sale en comprobantes). */
+  editado?: { por: string; fecha: string };
 }
 
 /**
@@ -57,6 +59,30 @@ export interface ResumenCuenta {
   cargosPendientes: number;
   saldo: number;
   ultimoMovimiento: string;
+  /** Días desde el cargo más antiguo sin pagar (solo si tiene saldo). Es un dato, no una alerta. */
+  diasDebiendo?: number;
+}
+
+/** Algo que registró un empleado en Pendientes (para la actividad reciente de Paola). */
+export interface ActividadPendiente {
+  id: string;
+  fecha: string;
+  tipo: "cargo" | "abono" | "pago";
+  cuentaId: string;
+  cuenta: string;
+  por: string;
+  /** "2 × Cuaderno universitario" (cargo) o la nota del pago. */
+  detalle?: string;
+  monto: number;
+}
+
+/** Resumen de Pendientes para Paola (solo lectura). */
+export interface ResumenPendientes {
+  porCobrar: number;
+  cuentasConSaldo: number;
+  fiadoMes: number;
+  cobradoMes: number;
+  actividad: ActividadPendiente[];
 }
 
 /** Todo lo de una cuenta, para el detalle y el estado de cuenta. */

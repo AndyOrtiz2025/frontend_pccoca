@@ -34,19 +34,23 @@ import { centavos } from "@/lib/reglas/dinero";
 import { formatQ } from "@/lib/format";
 import { pedirApi, postApi } from "@/lib/http";
 import { cargosPendientes, montoPagoCargos, totalCargo } from "@/lib/reglas/cuentas";
-import type { DetalleCuenta as Detalle, PagoCuenta } from "@/types/pendiente";
+import type { Cargo, DetalleCuenta as Detalle, PagoCuenta } from "@/types/pendiente";
 import { ComprobantePago, EstadoCuenta } from "./Documentos";
 import { ModalAbono } from "./ModalAbono";
 import { ModalCargo } from "./ModalCargo";
 import { ModalCuenta } from "./ModalCuenta";
+import { ModalEditarCargo } from "./ModalEditarCargo";
 
 /** Cuenta de un cliente u organización: cargos, pagos, saldo y comprobantes. */
 export function DetalleCuenta({
   detalle,
   soloLectura,
+  base = "/empleado/pendientes",
 }: {
   detalle: Detalle;
   soloLectura?: boolean;
+  /** Lista a la que regresa (Empleado o Paola). */
+  base?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -58,6 +62,7 @@ export function DetalleCuenta({
   const [modal, setModal] = useState<
     "cargo" | "abono" | "editar" | "estado" | "pagar" | "eliminar" | null
   >(null);
+  const [editando, setEditando] = useState<Cargo | null>(null);
   const [comprobante, setComprobante] = useState<{ pago: PagoCuenta; detalle: Detalle } | null>(
     null,
   );
@@ -90,7 +95,7 @@ export function DetalleCuenta({
     try {
       await pedirApi("DELETE", `/api/cuentas/${encodeURIComponent(cuenta.id)}`);
       toast(`${cuenta.nombre} eliminado`, "success");
-      router.push("/empleado/pendientes");
+      router.push(base);
       router.refresh();
     } catch (e) {
       manejarError(e);
@@ -100,7 +105,7 @@ export function DetalleCuenta({
   return (
     <div className="flex flex-col gap-4">
       <Link
-        href="/empleado/pendientes"
+        href={base}
         className="inline-flex w-fit items-center gap-1.5 rounded-xs text-small text-ink-muted hover:text-navy-900"
       >
         <ArrowLeft className="size-3.5" /> Todos los pendientes
@@ -201,6 +206,11 @@ export function DetalleCuenta({
                 <Th numeric>Precio</Th>
                 <Th numeric>Total</Th>
                 <Th>Estado</Th>
+                {!soloLectura && (
+                  <Th className="w-12">
+                    <span className="sr-only">Editar</span>
+                  </Th>
+                )}
               </tr>
             </THead>
             <TBody>
@@ -237,6 +247,11 @@ export function DetalleCuenta({
                     <Td>
                       <span className="text-ink-strong">{c.descripcion}</span>
                       {c.nota && <span className="block text-small text-ink-muted">{c.nota}</span>}
+                      <span className="block text-small text-ink-muted">
+                        Registró {c.registradoPor}
+                        {c.editado &&
+                          ` · Editado por ${c.editado.por} el ${formatFecha(c.editado.fecha)}`}
+                      </span>
                     </Td>
                     {esOrg && (
                       <Td className="whitespace-nowrap">
@@ -261,6 +276,21 @@ export function DetalleCuenta({
                         <Chip tono="bg-gold-100 text-gold-text">Pendiente</Chip>
                       )}
                     </Td>
+                    {!soloLectura && (
+                      <Td>
+                        {!pagado && (
+                          <Button
+                            variant="icon"
+                            size="sm"
+                            aria-label={`Editar ${c.descripcion}`}
+                            title="Editar"
+                            onClick={() => setEditando(c)}
+                          >
+                            <Pencil />
+                          </Button>
+                        )}
+                      </Td>
+                    )}
                   </Tr>
                 );
               })}
@@ -312,6 +342,9 @@ export function DetalleCuenta({
       )}
 
       {modal === "cargo" && <ModalCargo cuenta={cuenta} onClose={() => setModal(null)} />}
+      {editando && (
+        <ModalEditarCargo cuenta={cuenta} cargo={editando} onClose={() => setEditando(null)} />
+      )}
       {modal === "abono" && (
         <ModalAbono detalle={detalle} onClose={() => setModal(null)} onPagado={alPagar} />
       )}

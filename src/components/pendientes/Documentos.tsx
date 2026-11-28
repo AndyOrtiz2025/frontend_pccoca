@@ -113,13 +113,7 @@ export function ComprobantePago({
   return (
     <DocumentoImprimible
       titulo="Comprobante de pago"
-      subtitulo={
-        <>
-          {formatFechaHora(pago.fecha)}
-          <br />
-          Atendió: {pago.registradoPor}
-        </>
-      }
+      subtitulo={formatFechaHora(pago.fecha)}
       onClose={onClose}
     >
       <p className="text-h2 font-semibold text-ink-strong">{detalle.cuenta.nombre}</p>
