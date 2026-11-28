@@ -42,7 +42,26 @@ En producción (`npm run build && npm start`) la app exige `SESSION_SECRET` en e
 | `npm run lint`      | ESLint                          |
 | `npm run typecheck` | Revisión de tipos de TypeScript |
 | `npm test`          | Pruebas con Vitest              |
+| `npm run test:e2e`  | Pruebas end-to-end (Playwright) |
 | `npm run format`    | Da formato con Prettier         |
+
+## Pruebas end-to-end
+
+Están en `e2e/` y usan [Playwright](https://playwright.dev): abren el navegador, entran como
+empleado, Paola u Oscar y usan las pantallas como lo haría una persona (ventas, pendientes,
+trámites, productos, códigos de barras, proveedores, pedidos, devoluciones y catálogo de trámites).
+
+```bash
+npx playwright install chromium   # solo la primera vez: descarga el navegador
+npm run test:e2e                  # hace el build, levanta la app en el puerto 3100 y corre todo
+npm run test:e2e:ui               # lo mismo, en una ventana donde se ve cada paso
+```
+
+- Antes de cada prueba los datos de prueba vuelven a su estado inicial (ruta `/api/e2e/reiniciar`,
+  que solo existe cuando la app arranca con `E2E=1`; lo hace `playwright.config.ts`).
+- Si ya tienes la app corriendo con `E2E=1` en el puerto 3100, las pruebas la reutilizan.
+- En el CI corren en cada PR. Si fallan, el reporte con capturas queda como artefacto
+  `reporte-e2e` en la corrida de GitHub Actions.
 
 ## Estructura
 
