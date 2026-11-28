@@ -106,6 +106,7 @@ export const MENU: Record<Rol, GrupoMenu[]> = {
             { label: "Librería", href: "/paola/productos/libreria" },
             { label: "Productos Varios", href: "/paola/productos/varios" },
             { label: "Proveedores", href: "/paola/proveedores" },
+            { label: "Pedidos", href: "/paola/pedidos" },
           ],
         },
         {

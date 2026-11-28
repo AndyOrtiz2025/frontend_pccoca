@@ -62,6 +62,8 @@ export function ModalProducto({
   proveedores,
   subcategorias,
   codigoSugerido,
+  inicial,
+  onCreado,
   onClose,
 }: {
   producto: Producto | null;
@@ -69,6 +71,10 @@ export function ModalProducto({
   proveedores: Proveedor[];
   subcategorias: string[];
   codigoSugerido: string;
+  /** Producto nuevo que viene de un pedido: nombre y proveedor ya llenos. */
+  inicial?: { nombre?: string; proveedorId?: string };
+  /** Se llama con el id del producto recién creado. */
+  onCreado?: (id: string) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -80,14 +86,14 @@ export function ModalProducto({
   const permiteMayoreo = categoria !== "tecnologia";
 
   // ─── Datos generales ───
-  const [nombre, setNombre] = useState(p?.nombre ?? "");
+  const [nombre, setNombre] = useState(p?.nombre ?? inicial?.nombre ?? "");
   const [codigo, setCodigo] = useState(p?.codigo ?? codigoSugerido);
   const [codigoBarras, setCodigoBarras] = useState(
     p && p.codigoBarras !== p.codigo ? p.codigoBarras : "",
   );
   const [subcategoria, setSubcategoria] = useState(p?.subcategoria ?? "");
   const [descripcion, setDescripcion] = useState(p?.descripcion ?? "");
-  const [proveedorId, setProveedorId] = useState(p?.proveedorId ?? "");
+  const [proveedorId, setProveedorId] = useState(p?.proveedorId ?? inicial?.proveedorId ?? "");
 
   // ─── ¿Cómo lo compras? ───
   const [comoSeCompra, setComoSeCompra] = useState<ComoSeCompra>(f ? "paquete" : "unidad");
@@ -238,7 +244,10 @@ export function ModalProducto({
     setGuardando(true);
     try {
       if (p) await pedirApi("PATCH", `/api/productos/${encodeURIComponent(p.id)}`, form);
-      else await pedirApi("POST", "/api/productos", form);
+      else {
+        const creado = await pedirApi<{ id: string }>("POST", "/api/productos", form);
+        onCreado?.(creado.id);
+      }
       toast(
         p ? "Cambios guardados" : `${r.data.nombre} agregado a ${ETIQUETA_CATEGORIA[categoria]}`,
         "success",
@@ -696,6 +705,25 @@ export function ModalProducto({
                   <span>
                     Hay <strong className="text-ink-strong">{describirStock(p)}</strong>. El stock
                     se mueve con compras y mermas, no desde aquí.
+                  </span>
+                </p>
+                <CampoEntero
+                  label={
+                    porPaquete
+                      ? `${pluralPaquete(nombrePaq)} con semáforo lleno`
+                      : "Unidades con semáforo lleno"
+                  }
+                  valor={referencia}
+                  error={error("stockReferencia")}
+                  onChange={setReferencia}
+                />
+              </div>
+            ) : inicial ? (
+              <div className="flex flex-col gap-3">
+                <p className="bg-gray-50 flex items-start gap-2 rounded-md px-3 py-2 text-small text-ink-muted">
+                  <Info className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    Se crea con stock 0: lo que vino se suma cuando guardes la revisión del pedido.
                   </span>
                 </p>
                 <CampoEntero

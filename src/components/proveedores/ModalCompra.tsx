@@ -10,17 +10,15 @@ import {
   Save,
   ScanBarcode,
   Trash2,
-  TrendingDown,
-  TrendingUp,
 } from "lucide-react";
 import { Button, Field, Input, Modal, Select, useToast } from "@/components/ui";
 import { ImagenProducto } from "@/components/venta/ImagenProducto";
 import { useErrorApi } from "@/hooks/useErrorApi";
-import { cn } from "@/lib/cn";
 import { diaDeGuatemala } from "@/lib/fechas";
 import { formatQ } from "@/lib/format";
 import { ErrorApi, postApi } from "@/lib/http";
 import { cantidadCon, nombrePaquete } from "@/lib/presentacion";
+import { AvisosCosto } from "./AvisosCosto";
 import { buscarPorEscaneo, buscarProductos } from "@/lib/reglas/busqueda";
 import { centavos } from "@/lib/reglas/dinero";
 import type { AvisoCosto } from "@/lib/reglas/compras";
@@ -200,54 +198,10 @@ export function ModalCompra({
                 : `${resultado.reclamos} productos llegaron dañados: quedaron como reclamos pendientes.`}
             </p>
           )}
-          {resultado.avisos.length > 0 && (
-            <div>
-              <p className="mb-2 text-small font-semibold text-ink-muted">Cambió el costo</p>
-              <ul className="flex flex-col gap-2">
-                {resultado.avisos.map((a) => {
-                  const p = porId.get(a.productoId);
-                  const en =
-                    a.presentacion === "paquete" && p
-                      ? `por ${nombrePaquete(p).toLowerCase()}`
-                      : "por unidad";
-                  const subio = a.ahora > a.antes;
-                  return (
-                    <li
-                      key={`${a.productoId}-${a.presentacion}`}
-                      className={cn(
-                        "rounded-md border px-3 py-2",
-                        a.ganancia < 0 ? "border-stock-out/40 bg-stock-out-bg" : "border-gray-200",
-                      )}
-                    >
-                      <p className="flex items-center gap-1.5 font-semibold text-ink-strong">
-                        {subio ? (
-                          <TrendingUp className="size-4 text-stock-out" />
-                        ) : (
-                          <TrendingDown className="size-4 text-stock-ok" />
-                        )}
-                        {a.nombre}
-                      </p>
-                      <p className="text-small text-ink">
-                        El costo {en} {subio ? "subió" : "bajó"} de {formatQ(a.antes)} a{" "}
-                        {formatQ(a.ahora)}.{" "}
-                        {a.ganancia < 0 ? (
-                          <strong className="text-stock-out-text">
-                            ¡Con el precio actual vendes bajo el costo! Revisa el precio.
-                          </strong>
-                        ) : (
-                          <>
-                            Con el precio actual ganas{" "}
-                            <strong className="tabular">{formatQ(a.ganancia)}</strong> (
-                            {a.porcentaje}%).{subio && " ¿Revisar el precio?"}
-                          </>
-                        )}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+          <AvisosCosto
+            avisos={resultado.avisos}
+            paquetes={new Map(productos.map((p) => [p.id, p.fraccionable?.nombrePaquete]))}
+          />
         </div>
       </Modal>
     );

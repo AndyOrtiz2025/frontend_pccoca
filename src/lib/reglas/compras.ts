@@ -20,6 +20,8 @@ export interface AvisoCosto {
   presentacion: Presentacion;
   antes: number;
   ahora: number;
+  /** Precio de venta actual de esa presentación (para proponer uno nuevo). */
+  precio: number;
   /** Ganancia con el precio actual y el costo nuevo (negativa = vende bajo el costo). */
   ganancia: number;
   porcentaje: number;
@@ -59,6 +61,7 @@ export function aplicarCompra(
               presentacion: "paquete",
               antes,
               ahora: costo,
+              precio: f.precioPaquete,
               ganancia: m.ganancia,
               porcentaje: m.porcentaje,
             }
@@ -79,6 +82,7 @@ export function aplicarCompra(
             presentacion: "unidad",
             antes,
             ahora: costo,
+            precio: producto.precio,
             ganancia: m.ganancia,
             porcentaje: m.porcentaje,
           }

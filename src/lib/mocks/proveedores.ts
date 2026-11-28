@@ -1,3 +1,4 @@
+import type { Pedido } from "@/types/pedido";
 import type { Compra, Proveedor, Reclamo } from "@/types/proveedor";
 
 /** Proveedores de prueba. TODO(datos reales): levantar el listado con Paola. */
@@ -97,5 +98,76 @@ export const RECLAMOS_DEMO: Reclamo[] = [
     motivo: "Llegó mojada",
     fecha: "2026-11-18T10:30:00-06:00",
     estado: "pendiente",
+  },
+];
+
+/** Pedidos de prueba: uno al que le falta una parte y otro que todavía no llega. */
+export const PEDIDOS_DEMO: Pedido[] = [
+  {
+    id: "ped-demo-1",
+    numero: "P-0001",
+    proveedorId: "prov-2",
+    admin: "paola",
+    fecha: "2026-11-20T15:30:00.000Z",
+    creadoPor: "Paola",
+    lineas: [
+      {
+        id: "lp-1",
+        productoId: "p-lib-0035",
+        nombre: "Folder tamaño oficio",
+        presentacion: "paquete",
+        cantidad: 6,
+        recibidas: 0,
+        estado: "pendiente",
+      },
+      {
+        id: "lp-2",
+        productoId: "p-lib-0040",
+        nombre: "Papel de china",
+        presentacion: "paquete",
+        cantidad: 10,
+        recibidas: 10,
+        estado: "completa",
+      },
+    ],
+    recepciones: [{ fecha: "2026-11-24T17:00:00.000Z", por: "Paola", total: 120 }],
+  },
+  {
+    id: "ped-demo-2",
+    numero: "P-0002",
+    proveedorId: "prov-3",
+    admin: "paola",
+    fecha: "2026-11-25T16:10:00.000Z",
+    creadoPor: "Paola",
+    notas: "Preguntar si ya tienen crayones de 24 colores.",
+    lineas: [
+      {
+        id: "lp-3",
+        productoId: "p-lib-0061",
+        nombre: "Lapicero azul",
+        presentacion: "unidad",
+        cantidad: 120,
+        recibidas: 0,
+        estado: "pendiente",
+      },
+      {
+        id: "lp-4",
+        productoId: "p-lib-0050",
+        nombre: "Cuaderno universitario",
+        presentacion: "unidad",
+        cantidad: 24,
+        recibidas: 0,
+        estado: "pendiente",
+      },
+      {
+        id: "lp-5",
+        nombre: "Crayones 12 colores",
+        presentacion: "unidad",
+        cantidad: 10,
+        recibidas: 0,
+        estado: "pendiente",
+      },
+    ],
+    recepciones: [],
   },
 ];

@@ -23,23 +23,26 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
 }
 
+/** Clases de un botón, para un <Link> que debe verse como botón. */
+export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md") {
+  return cn(
+    "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-button font-semibold whitespace-nowrap transition-colors",
+    "disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
+    variantes[variant],
+    variant === "icon" ? (size === "sm" ? "size-7" : "size-8") : tamanos[size],
+  );
+}
+
 /** Botones de la guía (sección 7.1). Alto 32px (28px en barras de herramientas). */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "primary", size = "md", className, type = "button", ...props },
   ref,
 ) {
-  const esIcono = variant === "icon";
   return (
     <button
       ref={ref}
       type={type}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-button font-semibold whitespace-nowrap transition-colors",
-        "disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
-        variantes[variant],
-        esIcono ? (size === "sm" ? "size-7" : "size-8") : tamanos[size],
-        className,
-      )}
+      className={cn(buttonClasses(variant, size), className)}
       {...props}
     />
   );

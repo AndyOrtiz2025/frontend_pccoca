@@ -23,6 +23,7 @@ export default async function Page({ params }: PageProps<"/paola/proveedores/[id
       productos={[...libreria, ...varios]}
       base="/paola/proveedores"
       categorias={["libreria", "varios"]}
+      basePedidos="/paola/pedidos"
     />
   );
 }
