@@ -44,9 +44,12 @@ import { ModalCuenta } from "./ModalCuenta";
 export function DetalleCuenta({
   detalle,
   soloLectura,
+  base = "/empleado/pendientes",
 }: {
   detalle: Detalle;
   soloLectura?: boolean;
+  /** Lista a la que regresa (Empleado o Paola). */
+  base?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -90,7 +93,7 @@ export function DetalleCuenta({
     try {
       await pedirApi("DELETE", `/api/cuentas/${encodeURIComponent(cuenta.id)}`);
       toast(`${cuenta.nombre} eliminado`, "success");
-      router.push("/empleado/pendientes");
+      router.push(base);
       router.refresh();
     } catch (e) {
       manejarError(e);
@@ -100,7 +103,7 @@ export function DetalleCuenta({
   return (
     <div className="flex flex-col gap-4">
       <Link
-        href="/empleado/pendientes"
+        href={base}
         className="inline-flex w-fit items-center gap-1.5 rounded-xs text-small text-ink-muted hover:text-navy-900"
       >
         <ArrowLeft className="size-3.5" /> Todos los pendientes
@@ -237,6 +240,9 @@ export function DetalleCuenta({
                     <Td>
                       <span className="text-ink-strong">{c.descripcion}</span>
                       {c.nota && <span className="block text-small text-ink-muted">{c.nota}</span>}
+                      <span className="block text-small text-ink-muted">
+                        Registró {c.registradoPor}
+                      </span>
                     </Td>
                     {esOrg && (
                       <Td className="whitespace-nowrap">

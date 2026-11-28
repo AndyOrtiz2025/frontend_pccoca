@@ -52,7 +52,13 @@ import { diaDeGuatemala } from "@/lib/fechas";
 import type { ArchivoAdjunto, Entrada, EntradaServicio, EntradaTramite } from "@/types/entrada";
 import type { EntradaServicioInput, EntradaTramiteInput } from "@/schemas/entrada.schema";
 import type { CargoInput, CuentaInput } from "@/schemas/pendiente.schema";
-import { calcularSaldo, cargosPendientes, montoPagoCargos } from "@/lib/reglas/cuentas";
+import {
+  calcularSaldo,
+  cargosPendientes,
+  debeDesde,
+  montoPagoCargos,
+  totalCargo,
+} from "@/lib/reglas/cuentas";
 import { normalizar } from "@/lib/reglas/busqueda";
 import type { Contadores } from "@/types/contadores";
 import type { Comprobante, LineaCarrito } from "@/types/movimiento";
@@ -62,6 +68,8 @@ import type {
   DetalleCuenta,
   PagoCuenta,
   ResumenCuenta,
+  ResumenPendientes,
+  ActividadPendiente,
 } from "@/types/pendiente";
 import type { EstadoProceso } from "@/types/estados";
 import type { EnProceso, ServicioEnProceso, TramiteEnProceso } from "@/types/proceso";
@@ -2095,8 +2103,9 @@ function buscarCuenta(id: string): CuentaPendiente {
 }
 
 /** Lista de cuentas: primero las que deben, luego por último movimiento. */
-export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
+export async function obtenerCuentas(rol: Rol, ahora = new Date()): Promise<ResumenCuenta[]> {
   exigirAccesoPendientes(rol);
+  const hoy = diaDeGuatemala(ahora);
   return almacen()
     .cuentas.map((cuenta) => {
       const d = detalleDe(cuenta);
@@ -2105,11 +2114,13 @@ export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
         ...d.cargos.map((c) => c.fecha),
         ...d.pagos.map((p) => p.fecha),
       ];
+      const desde = debeDesde(d.cargos, d.pagos);
       return {
         cuenta,
         cargosPendientes: cargosPendientes(d.cargos).length,
         saldo: d.saldo,
         ultimoMovimiento: fechas.sort().at(-1)!,
+        ...(desde && { diasDebiendo: Math.max(0, diasEntre(diaDeGuatemala(desde), hoy)) }),
       };
     })
     .sort(
@@ -2117,6 +2128,57 @@ export async function obtenerCuentas(rol: Rol): Promise<ResumenCuenta[]> {
         Number(y.saldo > 0) - Number(x.saldo > 0) ||
         y.ultimoMovimiento.localeCompare(x.ultimoMovimiento),
     );
+}
+
+/**
+ * Resumen de Pendientes para Paola: cuánto hay por cobrar, lo fiado y lo cobrado este mes, y lo
+ * último que registraron los empleados. Solo lectura: Paola no registra ni modifica fiados.
+ */
+export async function obtenerResumenPendientes(
+  rol: Rol,
+  ahora = new Date(),
+): Promise<ResumenPendientes> {
+  if (rol !== "paola") throw new SinPermisoError();
+  const a = almacen();
+  const mes = diaDeGuatemala(ahora).slice(0, 7);
+  const delMes = (fecha: string) => diaDeGuatemala(fecha).startsWith(mes);
+  const nombre = new Map(a.cuentas.map((c) => [c.id, c.nombre]));
+  const saldos = a.cuentas.map((c) => saldoDe(c.id));
+  const cargos = a.cargos.filter((c) => nombre.has(c.cuentaId));
+  const pagos = a.pagos.filter((p) => nombre.has(p.cuentaId));
+  const actividad: ActividadPendiente[] = [
+    ...cargos.map((c) => ({
+      id: c.id,
+      fecha: c.fecha,
+      tipo: "cargo" as const,
+      cuentaId: c.cuentaId,
+      cuenta: nombre.get(c.cuentaId)!,
+      por: c.registradoPor,
+      detalle: `${c.cantidad} × ${c.descripcion}`,
+      monto: totalCargo(c),
+    })),
+    ...pagos.map((p) => ({
+      id: p.id,
+      fecha: p.fecha,
+      tipo: p.tipo === "abono" ? ("abono" as const) : ("pago" as const),
+      cuentaId: p.cuentaId,
+      cuenta: nombre.get(p.cuentaId)!,
+      por: p.registradoPor,
+      ...(p.nota && { detalle: p.nota }),
+      monto: p.monto,
+    })),
+  ]
+    .sort((x, y) => y.fecha.localeCompare(x.fecha))
+    .slice(0, 12);
+  return {
+    porCobrar: centavos(saldos.reduce((s, x) => s + x, 0)),
+    cuentasConSaldo: saldos.filter((x) => x > 0).length,
+    fiadoMes: centavos(
+      cargos.filter((c) => delMes(c.fecha)).reduce((s, c) => s + totalCargo(c), 0),
+    ),
+    cobradoMes: centavos(pagos.filter((p) => delMes(p.fecha)).reduce((s, p) => s + p.monto, 0)),
+    actividad,
+  };
 }
 
 export async function obtenerCuenta(rol: Rol, id: string): Promise<DetalleCuenta | null> {
